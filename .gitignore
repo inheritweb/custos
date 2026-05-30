@@ -1,0 +1,15 @@
+.agents/
+.codex/
+
+# Local runtime/config state
+.env
+.env.*
+*.log
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+
+# Test and temporary output
+tmp/
+*.tmp

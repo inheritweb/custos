@@ -1,0 +1,461 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+OMARCHY_BACKUP_LIB_DIR="${OMARCHY_BACKUP_LIB_DIR:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)}"
+
+# shellcheck source=../lib/logging.sh
+source "$OMARCHY_BACKUP_LIB_DIR/logging.sh"
+# shellcheck source=../lib/config.sh
+source "$OMARCHY_BACKUP_LIB_DIR/config.sh"
+# shellcheck source=../lib/restic.sh
+source "$OMARCHY_BACKUP_LIB_DIR/restic.sh"
+# shellcheck source=../lib/status.sh
+source "$OMARCHY_BACKUP_LIB_DIR/status.sh"
+# shellcheck source=../lib/restore.sh
+source "$OMARCHY_BACKUP_LIB_DIR/restore.sh"
+# shellcheck source=../lib/password.sh
+source "$OMARCHY_BACKUP_LIB_DIR/password.sh"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  omarchy-backup <command> [args]
+
+Commands:
+  setup                        Configure remote storage and initialize repository
+  init                         Initialize the configured restic repository
+  backup [--dry-run]           Back up configured include paths
+  snapshots [args...]          List repository snapshots
+  ls <snapshot> [path]         List files in a snapshot
+  restore <snapshot> [path]    Restore a snapshot or path
+  check                        Check repository health
+  doctor                       Check local dependencies and config
+  forget [--dry-run]           Apply configured retention policy
+  prune                        Prune repository data
+  unlock                       Remove stale restic locks
+  status                       Show repository and backup status
+  remote setup                 Configure the configured remote backend
+  remote check                 Check the configured remote backend
+  password setup               Create/check an optional stored backup password
+  password status              Show how repository passwords are supplied
+  paths list                   Show configured include/exclude paths
+  paths include add <path>     Add a backup include path
+  paths include remove <path>  Remove a backup include path
+  paths exclude add <pattern>  Add a backup exclude pattern
+  paths exclude remove <pattern>
+
+Config:
+  config show                  Print effective config JSON
+  config validate              Validate config shape and adapter support
+  config edit                  Open config in $EDITOR
+  config restore               Restore config from an existing remote repository
+
+Options accepted by restore:
+  --target <path>              Restore target directory
+  --original                   Restore to original locations
+  --dry-run                    Preview restore where supported
+  --yes                        Skip confirmation prompt
+
+Environment:
+  OMARCHY_BACKUP_CONFIG        Override config path
+  OMARCHY_BACKUP_DRY_RUN       Set to 1 to print backend commands
+USAGE
+}
+
+require_command() {
+  local command_name="$1"
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    return 1
+  fi
+}
+
+require_runtime_dependencies() {
+  local -a missing=()
+  local command_name
+
+  for command_name in jq restic rclone; do
+    if ! require_command "$command_name"; then
+      missing+=("$command_name")
+    fi
+  done
+
+  if ((${#missing[@]} > 0)); then
+    log_error "Missing required dependencies: ${missing[*]}"
+    log_info "Install them with:"
+    log_info "  omarchy pkg add ${missing[*]}"
+    log_info "Then rerun: omarchy-backup doctor"
+    exit 1
+  fi
+
+}
+
+cmd_doctor() {
+  local failed=0
+  local command_name
+
+  printf 'Checking omarchy-backup environment...\n'
+
+  for command_name in jq restic rclone; do
+    if require_command "$command_name"; then
+      printf 'ok: %s found at %s\n' "$command_name" "$(command -v "$command_name")"
+    else
+      printf 'missing: %s\n' "$command_name"
+      failed=1
+    fi
+  done
+
+  if command -v jq >/dev/null 2>&1; then
+    if config_validate; then
+      printf 'ok: config is valid\n'
+    else
+      failed=1
+    fi
+
+    local password_command password_executable
+    password_command="$(config_password_command 2>/dev/null || true)"
+    if [[ -n "$password_command" ]]; then
+      password_executable="${password_command%% *}"
+      if require_command "$password_executable"; then
+        printf 'ok: password command found at %s\n' "$(command -v "$password_executable")"
+        if bash -lc "$password_command" >/dev/null 2>&1; then
+          printf 'ok: backup password is available\n'
+        else
+          printf 'missing: backup password is not available from configured command\n'
+          failed=1
+        fi
+      else
+        printf 'missing: backup password manager %s\n' "$password_executable"
+        failed=1
+      fi
+    else
+      printf 'ok: no stored backup password configured; commands will prompt when needed\n'
+    fi
+  else
+    printf 'skipped: config validation requires jq\n'
+  fi
+
+  if ((failed)); then
+    printf '\nInstall missing dependencies with:\n'
+    printf '  omarchy pkg add jq restic rclone\n'
+    return 1
+  fi
+
+  printf 'ok: environment is ready\n'
+}
+
+cmd_config() {
+  local subcommand="${1:-}"
+  shift || true
+
+  case "$subcommand" in
+    show)
+      config_print
+      ;;
+    validate)
+      config_validate
+      remote_load
+      log_success "Config is valid"
+      ;;
+    edit)
+      config_ensure_exists
+      "${EDITOR:-vi}" "$OMARCHY_BACKUP_CONFIG"
+      ;;
+    restore)
+      config_restore_from_repository "$@"
+      ;;
+    ""|-h|--help|help)
+      cat <<'USAGE'
+Usage:
+  omarchy-backup config show
+  omarchy-backup config validate
+  omarchy-backup config edit
+  omarchy-backup config restore [--repository <url>] [--yes]
+USAGE
+      ;;
+    *)
+      die "Unknown config command: $subcommand"
+      ;;
+  esac
+}
+
+config_restore_from_repository() {
+  require_command jq || die "Missing dependency: jq"
+  require_command rclone || die "Missing dependency: rclone"
+
+  local repository="" yes=0 remote_name="gdrive" remote_path="backups/home"
+  local target_dir restored_config config_dir
+
+  while (($#)); do
+    case "$1" in
+      --repository)
+        shift
+        (($#)) || die "--repository requires a value"
+        repository="$1"
+        shift
+        ;;
+      --remote)
+        shift
+        (($#)) || die "--remote requires a value"
+        remote_name="${1%:}"
+        shift
+        ;;
+      --path)
+        shift
+        (($#)) || die "--path requires a value"
+        remote_path="$1"
+        shift
+        ;;
+      --yes|-y)
+        yes=1
+        shift
+        ;;
+      *)
+        die "Unknown config restore option: $1"
+        ;;
+    esac
+  done
+
+  if [[ -z "$repository" ]]; then
+    repository="rclone:${remote_name}:${remote_path}"
+  else
+    case "$repository" in
+      rclone:*:*)
+        local rest="${repository#rclone:}"
+        remote_name="${rest%%:*}"
+        remote_path="${rest#*:}"
+        ;;
+      *)
+        die "Only rclone repositories are supported for config restore"
+        ;;
+    esac
+  fi
+
+  if [[ -f "$OMARCHY_BACKUP_CONFIG" && "$yes" != "1" ]]; then
+    die "Config already exists at $OMARCHY_BACKUP_CONFIG. Use --yes to overwrite."
+  fi
+
+  target_dir="$(mktemp -d)"
+  restored_config="$target_dir/config.json"
+
+  rclone copyto "${remote_name}:${remote_path}/.omarchy-backup/config.json" "$restored_config" >/dev/null ||
+    die "No omarchy-backup config found at ${remote_name}:${remote_path}/.omarchy-backup/config.json"
+
+  jq -e . "$restored_config" >/dev/null || die "Restored config is not valid JSON"
+
+  config_dir="$(dirname -- "$OMARCHY_BACKUP_CONFIG")"
+  mkdir -p "$config_dir"
+  cp "$restored_config" "$OMARCHY_BACKUP_CONFIG"
+  rm -rf "$target_dir"
+  log_success "Restored config to $OMARCHY_BACKUP_CONFIG"
+}
+
+cmd_init() {
+  require_runtime_dependencies
+  config_validate
+  remote_load
+  remote_check
+  restic_init
+}
+
+cmd_setup() {
+  require_runtime_dependencies
+  config_validate
+  remote_load
+  remote_setup
+  restic_init
+  log_success "Setup complete"
+}
+
+cmd_backup() {
+  require_runtime_dependencies
+  config_validate
+  remote_load
+  remote_check
+  restic_backup "$@"
+}
+
+cmd_snapshots() {
+  require_runtime_dependencies
+  config_validate
+  remote_load
+  restic_snapshots "$@"
+}
+
+cmd_ls() {
+  require_runtime_dependencies
+  config_validate
+  remote_load
+  restic_ls "$@"
+}
+
+cmd_restore() {
+  require_runtime_dependencies
+  config_validate
+  remote_load
+  restore_run "$@"
+}
+
+cmd_check() {
+  require_runtime_dependencies
+  config_validate
+  remote_load
+  restic_check "$@"
+}
+
+cmd_forget() {
+  require_runtime_dependencies
+  config_validate
+  remote_load
+  restic_forget "$@"
+}
+
+cmd_prune() {
+  require_runtime_dependencies
+  config_validate
+  remote_load
+  restic_prune "$@"
+}
+
+cmd_unlock() {
+  require_runtime_dependencies
+  config_validate
+  remote_load
+  restic_unlock "$@"
+}
+
+cmd_remote() {
+  local subcommand="${1:-}"
+  shift || true
+
+  require_runtime_dependencies
+  config_validate
+  remote_load
+
+  case "$subcommand" in
+    setup)
+      remote_setup "$@"
+      ;;
+    check)
+      remote_check "$@"
+      log_success "Remote is ready"
+      ;;
+    ""|-h|--help|help)
+      cat <<'USAGE'
+Usage:
+  omarchy-backup remote setup
+  omarchy-backup remote check
+USAGE
+      ;;
+    *)
+      die "Unknown remote command: $subcommand"
+      ;;
+  esac
+}
+
+cmd_password() {
+  local subcommand="${1:-}"
+  shift || true
+
+  require_command jq || die "Missing dependency: jq"
+  config_validate
+
+  case "$subcommand" in
+    setup)
+      password_setup "$@"
+      ;;
+    status)
+      password_status "$@"
+      ;;
+    ""|-h|--help|help)
+      cat <<'USAGE'
+Usage:
+  omarchy-backup password setup
+  omarchy-backup password status
+USAGE
+      ;;
+    *)
+      die "Unknown password command: $subcommand"
+      ;;
+  esac
+}
+
+cmd_paths() {
+  local subcommand="${1:-}"
+  shift || true
+
+  require_command jq || die "Missing dependency: jq"
+  config_validate
+
+  case "$subcommand" in
+    list)
+      config_paths_list
+      ;;
+    include|exclude)
+      local kind="$subcommand"
+      local action="${1:-}"
+      local value="${2:-}"
+
+      case "$action" in
+        add)
+          [[ -n "$value" ]] || die "Usage: omarchy-backup paths $kind add <path-or-pattern>"
+          value="$(config_compact_home_path "$value")"
+          config_paths_add "$kind" "$value"
+          log_success "Added $kind: $value"
+          ;;
+        remove)
+          [[ -n "$value" ]] || die "Usage: omarchy-backup paths $kind remove <path-or-pattern>"
+          value="$(config_compact_home_path "$value")"
+          config_paths_remove "$kind" "$value"
+          log_success "Removed $kind: $value"
+          ;;
+        *)
+          die "Usage: omarchy-backup paths $kind <add|remove> <path-or-pattern>"
+          ;;
+      esac
+      ;;
+    ""|-h|--help|help)
+      cat <<'USAGE'
+Usage:
+  omarchy-backup paths list
+  omarchy-backup paths include add <path>
+  omarchy-backup paths include remove <path>
+  omarchy-backup paths exclude add <pattern>
+  omarchy-backup paths exclude remove <pattern>
+USAGE
+      ;;
+    *)
+      die "Unknown paths command: $subcommand"
+      ;;
+  esac
+}
+
+main() {
+  local command_name="${1:-}"
+  shift || true
+
+  case "$command_name" in
+    setup) cmd_setup "$@" ;;
+    init) cmd_init "$@" ;;
+    backup) cmd_backup "$@" ;;
+    snapshots) cmd_snapshots "$@" ;;
+    ls) cmd_ls "$@" ;;
+    restore) cmd_restore "$@" ;;
+    check) cmd_check "$@" ;;
+    doctor) cmd_doctor "$@" ;;
+    forget) cmd_forget "$@" ;;
+    prune) cmd_prune "$@" ;;
+    unlock) cmd_unlock "$@" ;;
+    status) status_show "$@" ;;
+    remote) cmd_remote "$@" ;;
+    password) cmd_password "$@" ;;
+    paths) cmd_paths "$@" ;;
+    config) cmd_config "$@" ;;
+    ""|-h|--help|help) usage ;;
+    *)
+      usage >&2
+      die "Unknown command: $command_name"
+      ;;
+  esac
+}
+
+main "$@"

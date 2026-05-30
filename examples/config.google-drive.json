@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "profile": "default",
+  "remote": {
+    "type": "google-drive",
+    "name": "gdrive",
+    "path": "backups/home"
+  },
+  "repository": {
+    "name": "desktop",
+    "hostname": "auto"
+  },
+  "paths": {
+    "include": [
+      "~/Documents",
+      "~/Pictures",
+      "~/.ssh",
+      "~/.gnupg",
+      "~/.password-store"
+    ],
+    "exclude": [
+      "**/node_modules",
+      "**/.next",
+      "**/dist",
+      "**/.turbo",
+      "**/.cache",
+      "**/.venv",
+      "**/target",
+      "**/*.iso"
+    ]
+  },
+  "retention": {
+    "daily": 7,
+    "weekly": 4,
+    "monthly": 6
+  }
+}
