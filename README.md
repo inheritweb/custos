@@ -405,3 +405,9 @@ Restore defaults to a staging directory under:
 
 Restoring to original locations requires `--original` and prints a warning before
 continuing.
+
+## Acknowledgements
+
+The TUI look, feel, and interaction model are inspired by
+[Impala](https://github.com/pythops/impala), especially its static pane layout,
+focused-border navigation, and modal prompts.
