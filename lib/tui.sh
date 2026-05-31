@@ -40,6 +40,8 @@ tui_require_dependencies() {
     log_error "Missing TUI dependencies: ${missing[*]}"
     log_info "Install them with:"
     log_info "  sudo pacman -S --needed ${missing[*]}"
+    log_info "  sudo apt-get install ${missing[*]}"
+    log_info "  sudo dnf install ${missing[*]}"
     exit 1
   fi
 }

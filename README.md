@@ -1,5 +1,13 @@
 # Custos
 
+```text
+   ______           __             
+  / ____/_  _______/ /_____  _____
+ / /   / / / / ___/ __/ __ \/ ___/
+/ /___/ /_/ (__  ) /_/ /_/ (__  ) 
+\____/\__,_/____/\__/\____/____/  
+```
+
 `custos` is a shell-first backup and restore tool for Linux home directories.
 It uses `restic` for encrypted deduplicated backups and `rclone` for remote storage.
 
@@ -17,10 +25,18 @@ and the TUI is a shell-rendered dashboard over the same commands.
 - `restic`
 - `rclone`
 
-On Arch-based systems, install missing packages with:
+Install missing packages with the package manager for your distribution:
 
 ```bash
+# Arch / Manjaro
 sudo pacman -S --needed jq restic rclone
+
+# Debian / Ubuntu
+sudo apt-get update
+sudo apt-get install jq restic rclone
+
+# Fedora / RHEL family
+sudo dnf install jq restic rclone
 ```
 
 ## Install
@@ -49,8 +65,8 @@ For a VM test against a branch or commit:
 curl -fsSL https://raw.githubusercontent.com/inheritweb/custos/main/scripts/install.sh | bash -s -- --ref <branch-or-sha>
 ```
 
-The installer uses `sudo pacman -S --needed jq restic rclone` when that command is available.
-Otherwise, it falls back to `sudo pacman -S --needed jq restic rclone`.
+The installer can install dependencies automatically with `pacman`, `apt-get`,
+`dnf`, or `yum` when one of those package managers is available.
 Use `--no-deps` to skip dependency installation.
 
 Uninstall the local app files, command wrapper, config, and state:
@@ -72,7 +88,15 @@ custos uninstall --keep-local-data
 Install dependencies:
 
 ```bash
+# Arch / Manjaro
 sudo pacman -S --needed jq restic rclone
+
+# Debian / Ubuntu
+sudo apt-get update
+sudo apt-get install jq restic rclone
+
+# Fedora / RHEL family
+sudo dnf install jq restic rclone
 ```
 
 Check the local environment:
@@ -153,7 +177,16 @@ Restore to the original location only when that is intentional:
 On a newly installed machine, install dependencies and configure Google Drive:
 
 ```bash
+# Arch / Manjaro
 sudo pacman -S --needed jq restic rclone
+
+# Debian / Ubuntu
+sudo apt-get update
+sudo apt-get install jq restic rclone
+
+# Fedora / RHEL family
+sudo dnf install jq restic rclone
+
 ./bin/custos remote setup
 ```
 

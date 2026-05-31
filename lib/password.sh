@@ -92,6 +92,8 @@ password_check() {
     log_error "Backup password manager is not installed: ${password_command%% *}"
     log_info "Install it with:"
     log_info "  sudo pacman -S --needed ${password_command%% *}"
+    log_info "  sudo apt-get install ${password_command%% *}"
+    log_info "  sudo dnf install ${password_command%% *}"
     log_info "Or choose a different password command in: $CUSTOS_CONFIG"
     exit 1
   fi

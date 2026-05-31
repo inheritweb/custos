@@ -88,6 +88,8 @@ require_runtime_dependencies() {
     log_error "Missing required dependencies: ${missing[*]}"
     log_info "Install them with:"
     log_info "  sudo pacman -S --needed ${missing[*]}"
+    log_info "  sudo apt-get install ${missing[*]}"
+    log_info "  sudo dnf install ${missing[*]}"
     log_info "Then rerun: custos doctor"
     exit 1
   fi
@@ -142,6 +144,8 @@ cmd_doctor() {
   if ((failed)); then
     printf '\nInstall missing dependencies with:\n'
     printf '  sudo pacman -S --needed jq restic rclone\n'
+    printf '  sudo apt-get install jq restic rclone\n'
+    printf '  sudo dnf install jq restic rclone\n'
     return 1
   fi
 

@@ -348,7 +348,7 @@ test_config_restore_works_without_existing_config() {
   assert_contains "$restored_config" '"profile": "restored"'
 }
 
-test_missing_dependencies_use_pacman_command() {
+test_missing_dependencies_show_common_package_managers() {
   local config="$TMP_DIR/missing-deps.json"
   local missing_deps_bin="$TMP_DIR/missing-deps-bin"
   local output="$TMP_DIR/missing-deps.out"
@@ -367,6 +367,8 @@ test_missing_dependencies_use_pacman_command() {
   fi
 
   assert_contains "$output" 'sudo pacman -S --needed restic rclone'
+  assert_contains "$output" 'sudo apt-get install restic rclone'
+  assert_contains "$output" 'sudo dnf install restic rclone'
 }
 
 test_remote_setup_suppresses_rclone_token_output() {
@@ -669,7 +671,7 @@ test_tui_backup_shows_running_state_and_delta() {
   assert_contains "$output" "Added to the repository: 18 MiB"
 }
 
-test_tui_missing_dependencies_use_pacman() {
+test_tui_missing_dependencies_show_common_package_managers() {
   local config="$TMP_DIR/tui-missing-deps.json"
   local tui_bin="$TMP_DIR/tui-missing-bin"
   local output="$TMP_DIR/tui-missing-deps.out"
@@ -688,6 +690,8 @@ test_tui_missing_dependencies_use_pacman() {
 
   assert_contains "$output" "Missing TUI dependencies"
   assert_contains "$output" "sudo pacman -S --needed jq"
+  assert_contains "$output" "sudo apt-get install jq"
+  assert_contains "$output" "sudo dnf install jq"
 }
 
 test_installer_installs_local_checkout_wrapper() {
@@ -798,7 +802,7 @@ run_test "environment password supports TUI-style flow" test_environment_passwor
 run_test "failing password command falls back to interactive prompt" test_failing_password_command_falls_back_to_interactive
 run_test "backend failure gets a user-facing hint" test_backend_failure_gets_user_hint
 run_test "config restore works without existing config" test_config_restore_works_without_existing_config
-run_test "missing dependency guidance uses pacman" test_missing_dependencies_use_pacman_command
+run_test "missing dependency guidance shows common package managers" test_missing_dependencies_show_common_package_managers
 run_test "remote setup suppresses rclone token output" test_remote_setup_suppresses_rclone_token_output
 run_test "tui first-run exit starts cleanly" test_tui_first_run_exit_starts_cleanly
 run_test "tui configured exit starts cleanly" test_tui_configured_exit_starts_cleanly
@@ -813,7 +817,7 @@ run_test "tui snapshot header is orange when focused" test_tui_snapshot_header_i
 run_test "tui session password bootstraps snapshots" test_tui_session_password_bootstraps_snapshots
 run_test "tui retries until session password works" test_tui_retries_until_session_password_works
 run_test "tui backup shows running state and delta" test_tui_backup_shows_running_state_and_delta
-run_test "tui missing dependencies use pacman" test_tui_missing_dependencies_use_pacman
+run_test "tui missing dependencies show common package managers" test_tui_missing_dependencies_show_common_package_managers
 run_test "installer installs local checkout wrapper" test_installer_installs_local_checkout_wrapper
 run_test "uninstall removes installed files config and state" test_uninstall_removes_installed_files_config_and_state
 run_test "uninstall can keep local data" test_uninstall_can_keep_local_data

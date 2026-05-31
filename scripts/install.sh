@@ -118,6 +118,25 @@ install_dependencies() {
     return 0
   fi
 
+  if require_command apt-get; then
+    log "Installing packages with apt-get: ${missing[*]}"
+    run sudo apt-get update
+    run sudo apt-get install -y "${missing[@]}"
+    return 0
+  fi
+
+  if require_command dnf; then
+    log "Installing packages with dnf: ${missing[*]}"
+    run sudo dnf install -y "${missing[@]}"
+    return 0
+  fi
+
+  if require_command yum; then
+    log "Installing packages with yum: ${missing[*]}"
+    run sudo yum install -y "${missing[@]}"
+    return 0
+  fi
+
   warn "Missing packages: ${missing[*]}"
   die "Install them manually, then rerun with --no-deps."
 }
