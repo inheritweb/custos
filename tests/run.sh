@@ -28,8 +28,28 @@ if [[ "${FAIL_RESTIC:-0}" == "1" ]]; then
   exit 12
 fi
 
+if [[ -n "${EXPECT_RESTIC_PASSWORD:-}" && "${RESTIC_PASSWORD-}" != "$EXPECT_RESTIC_PASSWORD" ]]; then
+  printf 'Fatal: wrong password\n' >&2
+  exit 12
+fi
+
 for arg in "$@"; do
+  if [[ "$arg" == "backup" ]]; then
+    if printf '%s\n' "$*" | grep -Fq -- '--dry-run'; then
+      printf 'would add to the repository: 42 MiB (18 MiB stored)\n'
+      printf 'processed 12 files, 42 MiB in 0:01\n'
+    else
+      printf 'Files:          12 new,     0 changed,     0 unmodified\n'
+      printf 'Added to the repository: 18 MiB (42 MiB stored)\n'
+    fi
+    exit 0
+  fi
+
   if [[ "$arg" == "snapshots" ]]; then
+    if [[ -n "${RESTIC_SNAPSHOTS_JSON:-}" ]]; then
+      printf '%s\n' "$RESTIC_SNAPSHOTS_JSON"
+      exit 0
+    fi
     printf '[]\n'
     exit 0
   fi
@@ -377,6 +397,190 @@ SH
   assert_not_contains "$output" 'should-not-leak-to-output'
 }
 
+test_tui_first_run_exit_starts_cleanly() {
+  local config="$TMP_DIR/tui-first-run.json"
+  local output="$TMP_DIR/tui-first-run.out"
+
+  if ! OMARCHY_BACKUP_TUI_PASSWORD="session-password" OMARCHY_BACKUP_TUI_KEYS="q" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+    sed -n '1,220p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "No local config found"
+  assert_contains "$output" "Snapshots"
+  assert_contains "$output" "Actions"
+  assert_contains "$output" "Connect Google Drive"
+}
+
+test_tui_configured_exit_starts_cleanly() {
+  local config="$TMP_DIR/tui-configured.json"
+  local output="$TMP_DIR/tui-configured.out"
+
+  make_config "$config"
+
+  if ! OMARCHY_BACKUP_TUI_PASSWORD="session-password" OMARCHY_BACKUP_TUI_KEYS="q" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+    sed -n '1,220p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Config"
+  assert_contains "$output" "Snapshots"
+  assert_contains "$output" "Actions"
+  assert_contains "$output" "Remote"
+  assert_contains "$output" "Snapshots loaded"
+  assert_contains "$output" "Loading snapshots"
+  assert_not_contains "$output" "Browse selected snapshot"
+}
+
+test_tui_down_navigation_does_not_exit() {
+  local config="$TMP_DIR/tui-navigation.json"
+  local output="$TMP_DIR/tui-navigation.out"
+
+  make_config "$config"
+
+  if ! OMARCHY_BACKUP_TUI_PASSWORD="session-password" OMARCHY_BACKUP_TUI_KEYS="jq" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+    sed -n '1,220p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Refresh snapshots"
+  assert_not_contains "$output" "Repository operation failed"
+}
+
+test_tui_refresh_snapshots_ignores_status_stderr() {
+  local config="$TMP_DIR/tui-refresh.json"
+  local output="$TMP_DIR/tui-refresh.out"
+
+  make_config "$config"
+
+  if ! OMARCHY_BACKUP_TUI_PASSWORD="test-password" OMARCHY_BACKUP_TUI_KEYS="rq" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+    sed -n '1,260p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Snapshots loaded"
+  assert_contains "$output" "No snapshots found"
+  assert_not_contains "$output" "jq: parse error"
+}
+
+test_tui_snapshot_rows_are_readable_and_selectable() {
+  local config="$TMP_DIR/tui-snapshot-rows.json"
+  local output="$TMP_DIR/tui-snapshot-rows.out"
+  local snapshots
+
+  make_config "$config"
+  snapshots='[
+    {
+      "short_id": "abcdef12",
+      "time": "2026-05-30T10:58:39.632147495+01:00",
+      "hostname": "omarchy-test-host",
+      "paths": ["/home/test/Documents"]
+    }
+  ]'
+
+  if ! RESTIC_SNAPSHOTS_JSON="$snapshots" OMARCHY_BACKUP_TUI_PASSWORD="test-password" OMARCHY_BACKUP_TUI_KEYS="rq" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+    sed -n '1,300p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Created"
+  assert_contains "$output" ">  abcdef12"
+  assert_contains "$output" "2026-05-30 10:58:39 +01:00"
+  assert_contains "$output" "Restore selected snapshot"
+  assert_contains "$output" "Browse selected snapshot"
+}
+
+test_tui_session_password_bootstraps_snapshots() {
+  local config="$TMP_DIR/tui-bootstrap-snapshots.json"
+  local output="$TMP_DIR/tui-bootstrap-snapshots.out"
+  local snapshots
+
+  make_config "$config"
+  snapshots='[
+    {
+      "short_id": "feedface",
+      "time": "2026-05-31T09:12:13+01:00",
+      "hostname": "omarchy-test-host",
+      "paths": ["/home/test/Documents"]
+    }
+  ]'
+
+  if ! RESTIC_SNAPSHOTS_JSON="$snapshots" OMARCHY_BACKUP_TUI_PASSWORD="test-password" OMARCHY_BACKUP_TUI_KEYS="q" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+    sed -n '1,300p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Snapshots loaded"
+  assert_contains "$output" ">  feedface"
+  assert_contains "$output" "Restore selected snapshot"
+}
+
+test_tui_retries_until_session_password_works() {
+  local config="$TMP_DIR/tui-password-retry.json"
+  local output="$TMP_DIR/tui-password-retry.out"
+  local snapshots
+
+  make_config "$config"
+  snapshots='[
+    {
+      "short_id": "1234abcd",
+      "time": "2026-05-31T09:12:13+01:00",
+      "hostname": "omarchy-test-host",
+      "paths": ["/home/test/Documents"]
+    }
+  ]'
+
+  if ! EXPECT_RESTIC_PASSWORD="right-password" RESTIC_SNAPSHOTS_JSON="$snapshots" OMARCHY_BACKUP_TUI_PASSWORD=$'wrong-password\nright-password' OMARCHY_BACKUP_TUI_KEYS="q" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+    sed -n '1,360p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "wrong password"
+  assert_contains "$output" "Repository password did not work"
+  assert_contains "$output" "Snapshots loaded"
+  assert_contains "$output" ">  1234abcd"
+}
+
+test_tui_backup_shows_running_state_and_delta() {
+  local config="$TMP_DIR/tui-backup.json"
+  local output="$TMP_DIR/tui-backup.out"
+
+  make_config "$config"
+
+  if ! OMARCHY_BACKUP_TUI_PASSWORD="test-password" OMARCHY_BACKUP_TUI_KEYS=$'\nyyq' OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+    sed -n '1,420p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Running backup dry-run"
+  assert_contains "$output" "would add to the repository: 42 MiB (18 MiB stored)"
+  assert_contains "$output" "(processed 12 files, 42 MiB in 0:01)"
+  assert_contains "$output" "Running backup"
+  assert_contains "$output" "Backup complete; snapshots refreshed."
+  assert_contains "$output" "Added to the repository: 18 MiB"
+}
+
+test_tui_missing_dependencies_use_omarchy_pkg_add() {
+  local config="$TMP_DIR/tui-missing-deps.json"
+  local tui_bin="$TMP_DIR/tui-missing-bin"
+  local output="$TMP_DIR/tui-missing-deps.out"
+
+  mkdir -p "$tui_bin"
+  ln -s /usr/bin/bash "$tui_bin/bash"
+  ln -s /usr/bin/dirname "$tui_bin/dirname"
+  ln -s /usr/bin/pwd "$tui_bin/pwd"
+
+  make_config "$config"
+
+  if PATH="$tui_bin" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+    printf 'Expected tui to fail with missing dependencies\n' >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Missing TUI dependencies"
+  assert_contains "$output" "omarchy pkg add jq"
+}
+
 run_test "default config has no stored password command" test_default_config_has_no_password_command
 run_test "default paths are project-neutral" test_default_paths_are_project_neutral
 run_test "password status defaults to interactive" test_password_status_defaults_to_interactive
@@ -391,5 +595,14 @@ run_test "backend failure gets a user-facing hint" test_backend_failure_gets_use
 run_test "config restore works without existing config" test_config_restore_works_without_existing_config
 run_test "missing dependency guidance uses noninteractive Omarchy command" test_missing_dependencies_use_noninteractive_omarchy_command
 run_test "remote setup suppresses rclone token output" test_remote_setup_suppresses_rclone_token_output
+run_test "tui first-run exit starts cleanly" test_tui_first_run_exit_starts_cleanly
+run_test "tui configured exit starts cleanly" test_tui_configured_exit_starts_cleanly
+run_test "tui down navigation does not exit" test_tui_down_navigation_does_not_exit
+run_test "tui refresh snapshots ignores status stderr" test_tui_refresh_snapshots_ignores_status_stderr
+run_test "tui snapshot rows are readable and selectable" test_tui_snapshot_rows_are_readable_and_selectable
+run_test "tui session password bootstraps snapshots" test_tui_session_password_bootstraps_snapshots
+run_test "tui retries until session password works" test_tui_retries_until_session_password_works
+run_test "tui backup shows running state and delta" test_tui_backup_shows_running_state_and_delta
+run_test "tui missing dependencies use omarchy pkg add" test_tui_missing_dependencies_use_omarchy_pkg_add
 
 printf 'ok: %s tests passed\n' "$pass_count"

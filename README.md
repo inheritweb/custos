@@ -7,8 +7,8 @@ The first supported remote adapter is Google Drive.
 
 ## Status
 
-This repository is in the first CLI milestone. The TUI, installer, Waybar integration,
-and scheduling are intentionally deferred until the backup engine is solid.
+This repository is in the first shell milestone. The CLI backup engine is usable,
+and the TUI is a shell-rendered dashboard over the same commands.
 
 ## Requirements
 
@@ -65,6 +65,26 @@ Verify it:
 ./bin/omarchy-backup snapshots
 ./bin/omarchy-backup check
 ```
+
+### Interactive TUI
+
+Launch the interactive terminal UI:
+
+```bash
+./bin/omarchy-backup tui
+```
+
+The TUI is a shell frontend over the same commands documented below. It uses a
+static dashboard layout: config, snapshots, and actions stay visible while focus
+moves between the snapshots and actions panes with Tab.
+
+On first run, the actions pane lets you connect Google Drive, restore an existing
+config, or create a new config. Once configured, snapshots stay visible alongside
+backup, restore, path, repository, and maintenance actions.
+
+If no stored password command is available, the TUI asks for the repository
+password once at session start and reuses it for repository actions. Passwords
+are passed through the process environment, not as command-line arguments.
 
 ### Restore A File Safely
 
@@ -215,6 +235,7 @@ Restore a selected path from a snapshot:
 ```bash
 omarchy-backup init
 omarchy-backup setup
+omarchy-backup tui
 omarchy-backup backup [--dry-run]
 omarchy-backup snapshots [args...]
 omarchy-backup ls <snapshot> [path]

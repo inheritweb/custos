@@ -2,6 +2,7 @@
 set -euo pipefail
 
 OMARCHY_BACKUP_LIB_DIR="${OMARCHY_BACKUP_LIB_DIR:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)}"
+OMARCHY_BACKUP_BIN="${OMARCHY_BACKUP_BIN:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/omarchy-backup}"
 
 # shellcheck source=../lib/logging.sh
 source "$OMARCHY_BACKUP_LIB_DIR/logging.sh"
@@ -15,6 +16,8 @@ source "$OMARCHY_BACKUP_LIB_DIR/status.sh"
 source "$OMARCHY_BACKUP_LIB_DIR/restore.sh"
 # shellcheck source=../lib/password.sh
 source "$OMARCHY_BACKUP_LIB_DIR/password.sh"
+# shellcheck source=../lib/tui.sh
+source "$OMARCHY_BACKUP_LIB_DIR/tui.sh"
 
 usage() {
   cat <<'USAGE'
@@ -34,6 +37,7 @@ Commands:
   prune                        Prune repository data
   unlock                       Remove stale restic locks
   status                       Show repository and backup status
+  tui                          Open the interactive terminal UI
   remote setup                 Configure the configured remote backend
   remote check                 Check the configured remote backend
   password setup               Create/check an optional stored backup password
@@ -446,6 +450,7 @@ main() {
     prune) cmd_prune "$@" ;;
     unlock) cmd_unlock "$@" ;;
     status) status_show "$@" ;;
+    tui) tui_main "$@" ;;
     remote) cmd_remote "$@" ;;
     password) cmd_password "$@" ;;
     paths) cmd_paths "$@" ;;
