@@ -1234,7 +1234,7 @@ tui_activate_action() {
     "Remove selected path") tui_action_remove_selected_path ;;
     "Back to snapshots") tui_action_back_to_snapshots ;;
     "Check repository")
-      tui_capture_repo check && TUI_STATUS="Repository check passed" || TUI_STATUS="Repository check failed"
+      tui_capture_repo_with_loading "Checking repository" check && TUI_STATUS="Repository check passed" || TUI_STATUS="Repository check failed"
       ;;
     "Setup repository") tui_action_setup_repository ;;
     "Prune repository")

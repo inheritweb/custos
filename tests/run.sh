@@ -34,6 +34,14 @@ if [[ -n "${EXPECT_RESTIC_PASSWORD:-}" && "${RESTIC_PASSWORD-}" != "$EXPECT_REST
 fi
 
 for arg in "$@"; do
+  if [[ "$arg" == "check" ]]; then
+    if [[ "${RESTIC_CHECK_SLEEP:-0}" != "0" ]]; then
+      sleep "$RESTIC_CHECK_SLEEP"
+    fi
+    printf 'repository is ok\n'
+    exit 0
+  fi
+
   if [[ "$arg" == "backup" ]]; then
     if printf '%s\n' "$*" | grep -Fq -- '--dry-run'; then
       printf 'would add to the repository: 42 MiB (18 MiB stored)\n'
@@ -671,6 +679,22 @@ test_tui_backup_shows_running_state_and_delta() {
   assert_contains "$output" "Added to the repository: 18 MiB"
 }
 
+test_tui_check_repository_shows_running_state() {
+  local config="$TMP_DIR/tui-check-repository.json"
+  local output="$TMP_DIR/tui-check-repository.out"
+
+  make_config "$config"
+
+  if ! RESTIC_CHECK_SLEEP=0.1 CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS=$'\njjj\nq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+    sed -n '1,420p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Checking repository"
+  assert_contains "$output" "Repository check passed"
+  assert_contains "$output" "repository is ok"
+}
+
 test_tui_manage_paths_shows_existing_paths() {
   local config="$TMP_DIR/tui-paths-view.json"
   local output="$TMP_DIR/tui-paths-view.out"
@@ -898,6 +922,7 @@ run_test "tui snapshot header is orange when focused" test_tui_snapshot_header_i
 run_test "tui session password bootstraps snapshots" test_tui_session_password_bootstraps_snapshots
 run_test "tui retries until session password works" test_tui_retries_until_session_password_works
 run_test "tui backup shows running state and delta" test_tui_backup_shows_running_state_and_delta
+run_test "tui check repository shows running state" test_tui_check_repository_shows_running_state
 run_test "tui manage paths shows existing paths" test_tui_manage_paths_shows_existing_paths
 run_test "tui manage paths removes selected include" test_tui_manage_paths_removes_selected_include
 run_test "tui manage paths removes selected exclude" test_tui_manage_paths_removes_selected_exclude
