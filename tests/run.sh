@@ -66,6 +66,9 @@ cat >"$FAKE_BIN/rclone" <<'SH'
 #!/usr/bin/env bash
 case "${1:-}" in
   listremotes)
+    if [[ "${RCLONE_NO_REMOTES:-0}" == "1" ]]; then
+      exit 0
+    fi
     printf 'gdrive:\n'
     ;;
   mkdir|lsd)
@@ -453,6 +456,23 @@ test_tui_missing_repository_does_not_prompt_for_password() {
   assert_not_contains "$output" "Backup now"
 }
 
+test_tui_missing_remote_does_not_prompt_for_password() {
+  local config="$TMP_DIR/tui-missing-remote.json"
+  local output="$TMP_DIR/tui-missing-remote.out"
+
+  make_config "$config"
+
+  if ! RCLONE_NO_REMOTES=1 OMARCHY_BACKUP_TUI_KEYS="q" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+    sed -n '1,260p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Google Drive is not connected. Use Connect Google Drive."
+  assert_contains "$output" "Connect Google Drive"
+  assert_not_contains "$output" "Repository Password"
+  assert_not_contains "$output" "Backup now"
+}
+
 test_tui_down_navigation_does_not_exit() {
   local config="$TMP_DIR/tui-navigation.json"
   local output="$TMP_DIR/tui-navigation.out"
@@ -640,6 +660,7 @@ run_test "remote setup suppresses rclone token output" test_remote_setup_suppres
 run_test "tui first-run exit starts cleanly" test_tui_first_run_exit_starts_cleanly
 run_test "tui configured exit starts cleanly" test_tui_configured_exit_starts_cleanly
 run_test "tui missing repository does not prompt for password" test_tui_missing_repository_does_not_prompt_for_password
+run_test "tui missing remote does not prompt for password" test_tui_missing_remote_does_not_prompt_for_password
 run_test "tui down navigation does not exit" test_tui_down_navigation_does_not_exit
 run_test "tui refresh snapshots ignores status stderr" test_tui_refresh_snapshots_ignores_status_stderr
 run_test "tui snapshot rows are readable and selectable" test_tui_snapshot_rows_are_readable_and_selectable

@@ -9,6 +9,7 @@ TUI_LOG=""
 TUI_SNAPSHOTS_JSON=""
 TUI_SNAPSHOTS_TSV=""
 TUI_SNAPSHOTS_LOADED=0
+TUI_REMOTE_READY="unknown"
 TUI_REPOSITORY_READY="unknown"
 TUI_KEY=""
 TUI_PASSWORD_VALUE=""
@@ -278,6 +279,16 @@ ACTIONS
     return 0
   fi
 
+  if [[ "$TUI_REMOTE_READY" == "0" ]]; then
+    cat <<'ACTIONS'
+Connect Google Drive
+Restore config from remote
+Doctor
+Quit
+ACTIONS
+    return 0
+  fi
+
   if [[ "$TUI_REPOSITORY_READY" == "0" ]]; then
     cat <<'ACTIONS'
 Setup repository
@@ -456,11 +467,42 @@ tui_password_command_available() {
   return 1
 }
 
+tui_probe_remote_state() {
+  local remote_type remote_name
+
+  tui_config_exists || return 0
+
+  remote_type="$(jq -r '.remote.type // "google-drive"' "$OMARCHY_BACKUP_CONFIG")"
+  remote_name="$(jq -r '.remote.name // "gdrive"' "$OMARCHY_BACKUP_CONFIG" | sed 's/:$//')"
+  [[ -n "$remote_name" ]] || remote_name="gdrive"
+
+  if [[ "$remote_type" != "google-drive" ]]; then
+    TUI_REMOTE_READY="1"
+    return 0
+  fi
+
+  if ! command -v rclone >/dev/null 2>&1; then
+    TUI_REMOTE_READY="0"
+    TUI_STATUS="rclone is not installed. Use Doctor for details."
+    return 0
+  fi
+
+  if rclone listremotes 2>/dev/null | grep -Fxq "${remote_name}:"; then
+    TUI_REMOTE_READY="1"
+    return 0
+  fi
+
+  TUI_REMOTE_READY="0"
+  TUI_REPOSITORY_READY="0"
+  TUI_STATUS="Google Drive is not connected. Use Connect Google Drive."
+}
+
 tui_probe_repository_state() {
   local error_file
   local -a base_args
 
   tui_config_exists || return 0
+  [[ "$TUI_REMOTE_READY" != "0" ]] || return 0
 
   mapfile -d '' -t base_args < <(restic_base_args)
   error_file="$(mktemp)"
@@ -505,6 +547,7 @@ tui_bootstrap_snapshots() {
   local first_prompt=1
 
   tui_config_exists || return 0
+  [[ "$TUI_REMOTE_READY" != "0" ]] || return 0
   if [[ "$TUI_REPOSITORY_READY" == "0" ]]; then
     return 0
   fi
@@ -610,6 +653,11 @@ tui_fetch_snapshots_with_loading() {
 
 tui_refresh_snapshots() {
   local parse_error
+
+  if [[ "$TUI_REMOTE_READY" == "0" ]]; then
+    TUI_STATUS="Google Drive is not connected. Use Connect Google Drive."
+    return 1
+  fi
 
   if [[ "$TUI_REPOSITORY_READY" == "0" ]]; then
     TUI_STATUS="Repository is not initialized. Use Setup repository."
@@ -799,7 +847,14 @@ tui_activate_action() {
 
   case "$action" in
     "Connect Google Drive")
-      tui_capture tui_cli remote setup && TUI_STATUS="Google Drive connected" || TUI_STATUS="Remote setup failed"
+      if tui_capture tui_cli remote setup; then
+        TUI_REMOTE_READY="1"
+        TUI_STATUS="Google Drive connected"
+        tui_probe_repository_state
+        tui_bootstrap_snapshots || true
+      else
+        TUI_STATUS="Remote setup failed"
+      fi
       ;;
     "Restore config from remote")
       tui_confirm "Restore config from remote? This can overwrite local config." &&
@@ -876,6 +931,7 @@ tui_main() {
   tui_require_dependencies
   tui_enter_screen
   trap 'tui_exit_screen; exit 130' INT TERM
+  tui_probe_remote_state
   tui_probe_repository_state
   tui_bootstrap_snapshots || true
 
