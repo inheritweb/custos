@@ -162,17 +162,27 @@ install_files() {
   local source_dir="$1"
 
   log "Installing files to $INSTALL_DIR"
-  run mkdir -p "$INSTALL_DIR" "$BIN_DIR"
-  run cp -R "$source_dir/bin" "$INSTALL_DIR/"
-  run cp -R "$source_dir/lib" "$INSTALL_DIR/"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf 'dry-run: mkdir -p %q %q\n' "$INSTALL_DIR" "$BIN_DIR"
+    printf 'dry-run: copy project bin to %q\n' "$INSTALL_DIR/"
+    printf 'dry-run: copy project lib to %q\n' "$INSTALL_DIR/"
+    [[ -d "$source_dir/examples" ]] && printf 'dry-run: copy project examples to %q\n' "$INSTALL_DIR/"
+    [[ -f "$source_dir/README.md" ]] && printf 'dry-run: copy project README.md to %q\n' "$INSTALL_DIR/"
+    [[ -f "$source_dir/LICENSE" ]] && printf 'dry-run: copy project LICENSE to %q\n' "$INSTALL_DIR/"
+    return 0
+  fi
+
+  mkdir -p "$INSTALL_DIR" "$BIN_DIR"
+  cp -R "$source_dir/bin" "$INSTALL_DIR/"
+  cp -R "$source_dir/lib" "$INSTALL_DIR/"
   if [[ -d "$source_dir/examples" ]]; then
-    run cp -R "$source_dir/examples" "$INSTALL_DIR/"
+    cp -R "$source_dir/examples" "$INSTALL_DIR/"
   fi
   if [[ -f "$source_dir/README.md" ]]; then
-    run cp "$source_dir/README.md" "$INSTALL_DIR/"
+    cp "$source_dir/README.md" "$INSTALL_DIR/"
   fi
   if [[ -f "$source_dir/LICENSE" ]]; then
-    run cp "$source_dir/LICENSE" "$INSTALL_DIR/"
+    cp "$source_dir/LICENSE" "$INSTALL_DIR/"
   fi
 }
 
