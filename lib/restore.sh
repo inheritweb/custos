@@ -2,7 +2,7 @@
 
 restore_default_target() {
   local snapshot="$1"
-  printf '%s/Restored/omarchy-backup/%s\n' "$HOME" "$snapshot"
+  printf '%s/Restored/custos/%s\n' "$HOME" "$snapshot"
 }
 
 restore_confirm() {
@@ -52,7 +52,7 @@ restore_run() {
     esac
   done
 
-  [[ -n "$snapshot" ]] || die "Usage: omarchy-backup restore <snapshot> [path] [--target <path>|--original]"
+  [[ -n "$snapshot" ]] || die "Usage: custos restore <snapshot> [path] [--target <path>|--original]"
 
   if ((original)); then
     target="/"

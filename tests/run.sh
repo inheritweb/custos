@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-CLI="$ROOT_DIR/bin/omarchy-backup"
+CLI="$ROOT_DIR/bin/custos"
 TMP_DIR="$(mktemp -d)"
 FAKE_BIN="$TMP_DIR/bin"
 RESTIC_LOG="$TMP_DIR/restic.log"
@@ -81,7 +81,7 @@ case "${1:-}" in
     ;;
   copyto)
     printf 'RCLONE_COPYTO: %q %q\n' "${2:-}" "${3:-}" >>"${RCLONE_LOG:?}"
-    if [[ "${2:-}" == *":backups/home/.omarchy-backup/config.json" && -n "${RCLONE_FAKE_DOWNLOAD_CONFIG:-}" ]]; then
+    if [[ "${2:-}" == *":backups/home/.custos/config.json" && -n "${RCLONE_FAKE_DOWNLOAD_CONFIG:-}" ]]; then
       cp "$RCLONE_FAKE_DOWNLOAD_CONFIG" "${3:-}"
     fi
     ;;
@@ -100,7 +100,7 @@ chmod +x "$FAKE_BIN/restic" "$FAKE_BIN/rclone"
 export PATH="$FAKE_BIN:/usr/bin:/bin"
 export RESTIC_LOG
 export RCLONE_LOG="$TMP_DIR/rclone.log"
-export OMARCHY_BACKUP_STATE_DIR="$TMP_DIR/state"
+export CUSTOS_STATE_DIR="$TMP_DIR/state"
 
 pass_count=0
 
@@ -137,14 +137,14 @@ assert_not_contains() {
 
 make_config() {
   local config="$1"
-  OMARCHY_BACKUP_CONFIG="$config" "$CLI" config show >/dev/null
+  CUSTOS_CONFIG="$config" "$CLI" config show >/dev/null
 }
 
 test_default_config_has_no_password_command() {
   local config="$TMP_DIR/default-config.json"
   local output="$TMP_DIR/default-config.out"
 
-  OMARCHY_BACKUP_CONFIG="$config" "$CLI" config show >"$output"
+  CUSTOS_CONFIG="$config" "$CLI" config show >"$output"
 
   assert_contains "$output" '"version": 1'
   assert_not_contains "$output" 'passwordCommand'
@@ -154,7 +154,7 @@ test_default_paths_are_project_neutral() {
   local config="$TMP_DIR/default-paths.json"
   local output="$TMP_DIR/default-paths.out"
 
-  OMARCHY_BACKUP_CONFIG="$config" "$CLI" config show >"$output"
+  CUSTOS_CONFIG="$config" "$CLI" config show >"$output"
 
   assert_contains "$output" '"~/Documents"'
   assert_contains "$output" '"~/Pictures"'
@@ -168,7 +168,7 @@ test_password_status_defaults_to_interactive() {
   local output="$TMP_DIR/password-status.out"
 
   make_config "$config"
-  OMARCHY_BACKUP_CONFIG="$config" "$CLI" password status >"$output"
+  CUSTOS_CONFIG="$config" "$CLI" password status >"$output"
 
   assert_contains "$output" 'mode: interactive'
   assert_contains "$output" 'ask for the repository password when needed'
@@ -180,10 +180,10 @@ test_paths_commands_add_remove_and_dedupe() {
 
   make_config "$config"
 
-  OMARCHY_BACKUP_CONFIG="$config" "$CLI" paths include add '~/Projects' >/dev/null
-  OMARCHY_BACKUP_CONFIG="$config" "$CLI" paths include add '~/Projects' >/dev/null
-  OMARCHY_BACKUP_CONFIG="$config" "$CLI" paths exclude add '**/coverage' >/dev/null
-  OMARCHY_BACKUP_CONFIG="$config" "$CLI" paths list >"$output"
+  CUSTOS_CONFIG="$config" "$CLI" paths include add '~/Projects' >/dev/null
+  CUSTOS_CONFIG="$config" "$CLI" paths include add '~/Projects' >/dev/null
+  CUSTOS_CONFIG="$config" "$CLI" paths exclude add '**/coverage' >/dev/null
+  CUSTOS_CONFIG="$config" "$CLI" paths list >"$output"
 
   assert_contains "$output" '  - ~/Projects'
   assert_contains "$output" '  - **/coverage'
@@ -195,9 +195,9 @@ test_paths_commands_add_remove_and_dedupe() {
     return 1
   fi
 
-  OMARCHY_BACKUP_CONFIG="$config" "$CLI" paths include remove '~/Projects' >/dev/null
-  OMARCHY_BACKUP_CONFIG="$config" "$CLI" paths exclude remove '**/coverage' >/dev/null
-  OMARCHY_BACKUP_CONFIG="$config" "$CLI" paths list >"$output"
+  CUSTOS_CONFIG="$config" "$CLI" paths include remove '~/Projects' >/dev/null
+  CUSTOS_CONFIG="$config" "$CLI" paths exclude remove '**/coverage' >/dev/null
+  CUSTOS_CONFIG="$config" "$CLI" paths list >"$output"
 
   assert_not_contains "$output" '  - ~/Projects'
   assert_not_contains "$output" '  - **/coverage'
@@ -209,17 +209,17 @@ test_paths_commands_compact_home_to_tilde() {
 
   make_config "$config"
 
-  OMARCHY_BACKUP_CONFIG="$config" "$CLI" paths include add "$HOME/Projects" >/dev/null
-  OMARCHY_BACKUP_CONFIG="$config" "$CLI" paths exclude add "$HOME/Projects/cache" >/dev/null
-  OMARCHY_BACKUP_CONFIG="$config" "$CLI" paths list >"$output"
+  CUSTOS_CONFIG="$config" "$CLI" paths include add "$HOME/Projects" >/dev/null
+  CUSTOS_CONFIG="$config" "$CLI" paths exclude add "$HOME/Projects/cache" >/dev/null
+  CUSTOS_CONFIG="$config" "$CLI" paths list >"$output"
 
   assert_contains "$output" '  - ~/Projects'
   assert_contains "$output" '  - ~/Projects/cache'
   assert_not_contains "$output" "$HOME/Projects"
 
-  OMARCHY_BACKUP_CONFIG="$config" "$CLI" paths include remove "$HOME/Projects" >/dev/null
-  OMARCHY_BACKUP_CONFIG="$config" "$CLI" paths exclude remove "$HOME/Projects/cache" >/dev/null
-  OMARCHY_BACKUP_CONFIG="$config" "$CLI" paths list >"$output"
+  CUSTOS_CONFIG="$config" "$CLI" paths include remove "$HOME/Projects" >/dev/null
+  CUSTOS_CONFIG="$config" "$CLI" paths exclude remove "$HOME/Projects/cache" >/dev/null
+  CUSTOS_CONFIG="$config" "$CLI" paths list >"$output"
 
   assert_not_contains "$output" '  - ~/Projects'
   assert_not_contains "$output" '  - ~/Projects/cache'
@@ -238,7 +238,7 @@ test_backup_dry_run_announces_interactive_password() {
   ' "$config" >"$TMP_DIR/backup-dry-run.next"
   mv "$TMP_DIR/backup-dry-run.next" "$config"
 
-  OMARCHY_BACKUP_CONFIG="$config" OMARCHY_BACKUP_DRY_RUN=1 "$CLI" backup --dry-run >"$output" 2>&1
+  CUSTOS_CONFIG="$config" CUSTOS_DRY_RUN=1 "$CLI" backup --dry-run >"$output" 2>&1
 
   assert_contains "$output" 'Repository password is not stored.'
   assert_contains "$output" "Skipping missing include path: $missing_path"
@@ -259,9 +259,9 @@ test_backup_uploads_config_bootstrap() {
   mv "$TMP_DIR/backup-config-bootstrap.next" "$config"
   : >"$RCLONE_LOG"
 
-  OMARCHY_BACKUP_CONFIG="$config" OMARCHY_BACKUP_DRY_RUN=1 "$CLI" backup --dry-run >"$output" 2>&1
+  CUSTOS_CONFIG="$config" CUSTOS_DRY_RUN=1 "$CLI" backup --dry-run >"$output" 2>&1
 
-  assert_contains "$output" 'Dry run: would upload config to gdrive:backups/home/.omarchy-backup/config.json'
+  assert_contains "$output" 'Dry run: would upload config to gdrive:backups/home/.custos/config.json'
 }
 
 test_password_command_is_exported_to_backend() {
@@ -273,7 +273,7 @@ test_password_command_is_exported_to_backend() {
   mv "$TMP_DIR/password-command.next" "$config"
   : >"$RESTIC_LOG"
 
-  OMARCHY_BACKUP_CONFIG="$config" "$CLI" snapshots >"$output" 2>&1
+  CUSTOS_CONFIG="$config" "$CLI" snapshots >"$output" 2>&1
 
   assert_contains "$output" 'Using configured password command for repository access.'
   assert_contains "$RESTIC_LOG" 'RESTIC_PASSWORD_COMMAND=printf secret'
@@ -286,7 +286,7 @@ test_environment_password_is_used_for_tui_style_flow() {
   make_config "$config"
   : >"$RESTIC_LOG"
 
-  RESTIC_PASSWORD='from-tui' OMARCHY_BACKUP_CONFIG="$config" "$CLI" snapshots >"$output" 2>&1
+  RESTIC_PASSWORD='from-tui' CUSTOS_CONFIG="$config" "$CLI" snapshots >"$output" 2>&1
 
   assert_contains "$output" 'Using password supplied by the current environment.'
   assert_contains "$RESTIC_LOG" 'RESTIC_PASSWORD=from-tui'
@@ -298,7 +298,7 @@ test_failing_password_command_falls_back_to_interactive() {
   local pass_bin="$FAKE_BIN/pass"
 
   make_config "$config"
-  jq '.secrets.passwordCommand = "pass show restic/omarchy-backup"' "$config" >"$TMP_DIR/failing-password-command.next"
+  jq '.secrets.passwordCommand = "pass show restic/custos"' "$config" >"$TMP_DIR/failing-password-command.next"
   mv "$TMP_DIR/failing-password-command.next" "$config"
 
   cat >"$pass_bin" <<'SH'
@@ -308,7 +308,7 @@ SH
   chmod +x "$pass_bin"
   : >"$RESTIC_LOG"
 
-  OMARCHY_BACKUP_CONFIG="$config" OMARCHY_BACKUP_DRY_RUN=1 "$CLI" snapshots >"$output" 2>&1
+  CUSTOS_CONFIG="$config" CUSTOS_DRY_RUN=1 "$CLI" snapshots >"$output" 2>&1
 
   assert_contains "$output" 'Configured backup password command did not return a password.'
   assert_contains "$output" 'Falling back to an interactive repository password prompt.'
@@ -322,7 +322,7 @@ test_backend_failure_gets_user_hint() {
 
   make_config "$config"
 
-  if FAIL_RESTIC=1 RESTIC_PASSWORD=test OMARCHY_BACKUP_CONFIG="$config" "$CLI" snapshots >"$output" 2>&1; then
+  if FAIL_RESTIC=1 RESTIC_PASSWORD=test CUSTOS_CONFIG="$config" "$CLI" snapshots >"$output" 2>&1; then
     printf 'Expected snapshots to fail\n' >&2
     return 1
   fi
@@ -341,14 +341,14 @@ test_config_restore_works_without_existing_config() {
   mv "$TMP_DIR/source-config.next" "$source_config"
 
   RCLONE_FAKE_DOWNLOAD_CONFIG="$source_config" \
-    OMARCHY_BACKUP_CONFIG="$restored_config" \
+    CUSTOS_CONFIG="$restored_config" \
     "$CLI" config restore --repository rclone:gdrive:backups/home --yes >"$output" 2>&1
 
   assert_contains "$output" "Restored config to $restored_config"
   assert_contains "$restored_config" '"profile": "restored"'
 }
 
-test_missing_dependencies_use_noninteractive_omarchy_command() {
+test_missing_dependencies_use_pacman_command() {
   local config="$TMP_DIR/missing-deps.json"
   local missing_deps_bin="$TMP_DIR/missing-deps-bin"
   local output="$TMP_DIR/missing-deps.out"
@@ -361,13 +361,12 @@ test_missing_dependencies_use_noninteractive_omarchy_command() {
 
   make_config "$config"
 
-  if PATH="$missing_deps_bin" OMARCHY_BACKUP_CONFIG="$config" "$CLI" backup --dry-run >"$output" 2>&1; then
+  if PATH="$missing_deps_bin" CUSTOS_CONFIG="$config" "$CLI" backup --dry-run >"$output" 2>&1; then
     printf 'Expected backup to fail with missing dependencies\n' >&2
     return 1
   fi
 
-  assert_contains "$output" 'omarchy pkg add restic rclone'
-  assert_not_contains "$output" 'omarchy pkg install'
+  assert_contains "$output" 'sudo pacman -S --needed restic rclone'
 }
 
 test_remote_setup_suppresses_rclone_token_output() {
@@ -404,7 +403,7 @@ SH
 
   make_config "$config"
 
-  RCLONE_FAKE_STATE="$TMP_DIR/remote-created" PATH="$isolated_bin:/usr/bin:/bin" OMARCHY_BACKUP_CONFIG="$config" "$CLI" remote setup >"$output" 2>&1
+  RCLONE_FAKE_STATE="$TMP_DIR/remote-created" PATH="$isolated_bin:/usr/bin:/bin" CUSTOS_CONFIG="$config" "$CLI" remote setup >"$output" 2>&1
 
   assert_contains "$output" 'Creating Google Drive remote'
   assert_not_contains "$output" 'should-not-leak-to-output'
@@ -414,7 +413,7 @@ test_tui_first_run_exit_starts_cleanly() {
   local config="$TMP_DIR/tui-first-run.json"
   local output="$TMP_DIR/tui-first-run.out"
 
-  if ! OMARCHY_BACKUP_TUI_PASSWORD="session-password" OMARCHY_BACKUP_TUI_KEYS="q" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! CUSTOS_TUI_PASSWORD="session-password" CUSTOS_TUI_KEYS="q" CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,220p' "$output" >&2
     return 1
   fi
@@ -431,7 +430,7 @@ test_tui_configured_exit_starts_cleanly() {
 
   make_config "$config"
 
-  if ! OMARCHY_BACKUP_TUI_PASSWORD="session-password" OMARCHY_BACKUP_TUI_KEYS="q" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! CUSTOS_TUI_PASSWORD="session-password" CUSTOS_TUI_KEYS="q" CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,220p' "$output" >&2
     return 1
   fi
@@ -452,7 +451,7 @@ test_tui_missing_repository_does_not_prompt_for_password() {
 
   make_config "$config"
 
-  if ! RCLONE_REPOSITORY_CONFIG_MISSING=1 RESTIC_REPOSITORY_MISSING=1 OMARCHY_BACKUP_TUI_KEYS="q" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! RCLONE_REPOSITORY_CONFIG_MISSING=1 RESTIC_REPOSITORY_MISSING=1 CUSTOS_TUI_KEYS="q" CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,260p' "$output" >&2
     return 1
   fi
@@ -469,7 +468,7 @@ test_tui_missing_remote_does_not_prompt_for_password() {
 
   make_config "$config"
 
-  if ! RCLONE_NO_REMOTES=1 OMARCHY_BACKUP_TUI_KEYS="q" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! RCLONE_NO_REMOTES=1 CUSTOS_TUI_KEYS="q" CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,260p' "$output" >&2
     return 1
   fi
@@ -488,7 +487,7 @@ test_tui_setup_repository_confirms_and_reuses_password() {
   make_config "$config"
   snapshots='[{"short_id":"abc12345","time":"2026-05-30T21:32:39+01:00","hostname":"vm","paths":["/home/test"]}]'
 
-  if ! RCLONE_REPOSITORY_CONFIG_MISSING=1 RESTIC_SNAPSHOTS_JSON="$snapshots" OMARCHY_BACKUP_TUI_PASSWORD=$'new-password\nnew-password' OMARCHY_BACKUP_TUI_KEYS=$'\nq' OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! RCLONE_REPOSITORY_CONFIG_MISSING=1 RESTIC_SNAPSHOTS_JSON="$snapshots" CUSTOS_TUI_PASSWORD=$'new-password\nnew-password' CUSTOS_TUI_KEYS=$'\nq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,260p' "$output" >&2
     return 1
   fi
@@ -506,7 +505,7 @@ test_tui_down_navigation_does_not_exit() {
 
   make_config "$config"
 
-  if ! OMARCHY_BACKUP_TUI_PASSWORD="session-password" OMARCHY_BACKUP_TUI_KEYS="jq" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! CUSTOS_TUI_PASSWORD="session-password" CUSTOS_TUI_KEYS="jq" CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,220p' "$output" >&2
     return 1
   fi
@@ -521,7 +520,7 @@ test_tui_refresh_snapshots_ignores_status_stderr() {
 
   make_config "$config"
 
-  if ! OMARCHY_BACKUP_TUI_PASSWORD="test-password" OMARCHY_BACKUP_TUI_KEYS="rq" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS="rq" CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,260p' "$output" >&2
     return 1
   fi
@@ -538,7 +537,7 @@ test_tui_restore_config_shows_loading_state() {
 
   make_config "$source_config"
 
-  if ! RCLONE_FAKE_DOWNLOAD_CONFIG="$source_config" OMARCHY_BACKUP_TUI_KEYS=$'j\nyq' OMARCHY_BACKUP_CONFIG="$target_config" "$CLI" tui >"$output" 2>&1; then
+  if ! RCLONE_FAKE_DOWNLOAD_CONFIG="$source_config" CUSTOS_TUI_KEYS=$'j\nyq' CUSTOS_CONFIG="$target_config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,300p' "$output" >&2
     return 1
   fi
@@ -557,12 +556,12 @@ test_tui_snapshot_rows_are_readable_and_selectable() {
     {
       "short_id": "abcdef12",
       "time": "2026-05-30T10:58:39.632147495+01:00",
-      "hostname": "omarchy-test-host",
+      "hostname": "custos-test-host",
       "paths": ["/home/test/Documents"]
     }
   ]'
 
-  if ! RESTIC_SNAPSHOTS_JSON="$snapshots" OMARCHY_BACKUP_TUI_PASSWORD="test-password" OMARCHY_BACKUP_TUI_KEYS="rq" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! RESTIC_SNAPSHOTS_JSON="$snapshots" CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS="rq" CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,300p' "$output" >&2
     return 1
   fi
@@ -585,12 +584,12 @@ test_tui_snapshot_header_is_orange_when_focused() {
     {
       "short_id": "fedcba98",
       "time": "2026-05-30T10:58:39+01:00",
-      "hostname": "omarchy-test-host",
+      "hostname": "custos-test-host",
       "paths": ["/home/test/Documents"]
     }
   ]'
 
-  if ! RESTIC_SNAPSHOTS_JSON="$snapshots" OMARCHY_BACKUP_TUI_PASSWORD="test-password" OMARCHY_BACKUP_TUI_KEYS=$'\n\tq' OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! RESTIC_SNAPSHOTS_JSON="$snapshots" CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS=$'\n\tq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,300p' "$output" >&2
     return 1
   fi
@@ -609,12 +608,12 @@ test_tui_session_password_bootstraps_snapshots() {
     {
       "short_id": "feedface",
       "time": "2026-05-31T09:12:13+01:00",
-      "hostname": "omarchy-test-host",
+      "hostname": "custos-test-host",
       "paths": ["/home/test/Documents"]
     }
   ]'
 
-  if ! RESTIC_SNAPSHOTS_JSON="$snapshots" OMARCHY_BACKUP_TUI_PASSWORD="test-password" OMARCHY_BACKUP_TUI_KEYS=$'\nq' OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! RESTIC_SNAPSHOTS_JSON="$snapshots" CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS=$'\nq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,300p' "$output" >&2
     return 1
   fi
@@ -634,12 +633,12 @@ test_tui_retries_until_session_password_works() {
     {
       "short_id": "1234abcd",
       "time": "2026-05-31T09:12:13+01:00",
-      "hostname": "omarchy-test-host",
+      "hostname": "custos-test-host",
       "paths": ["/home/test/Documents"]
     }
   ]'
 
-  if ! EXPECT_RESTIC_PASSWORD="right-password" RESTIC_SNAPSHOTS_JSON="$snapshots" OMARCHY_BACKUP_TUI_PASSWORD=$'wrong-password\nright-password' OMARCHY_BACKUP_TUI_KEYS=$'\nq' OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! EXPECT_RESTIC_PASSWORD="right-password" RESTIC_SNAPSHOTS_JSON="$snapshots" CUSTOS_TUI_PASSWORD=$'wrong-password\nright-password' CUSTOS_TUI_KEYS=$'\nq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,360p' "$output" >&2
     return 1
   fi
@@ -656,7 +655,7 @@ test_tui_backup_shows_running_state_and_delta() {
 
   make_config "$config"
 
-  if ! OMARCHY_BACKUP_TUI_PASSWORD="test-password" OMARCHY_BACKUP_TUI_KEYS=$'\n\nyyq' OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS=$'\n\nyyq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,420p' "$output" >&2
     return 1
   fi
@@ -669,7 +668,7 @@ test_tui_backup_shows_running_state_and_delta() {
   assert_contains "$output" "Added to the repository: 18 MiB"
 }
 
-test_tui_missing_dependencies_use_omarchy_pkg_add() {
+test_tui_missing_dependencies_use_pacman() {
   local config="$TMP_DIR/tui-missing-deps.json"
   local tui_bin="$TMP_DIR/tui-missing-bin"
   local output="$TMP_DIR/tui-missing-deps.out"
@@ -681,13 +680,13 @@ test_tui_missing_dependencies_use_omarchy_pkg_add() {
 
   make_config "$config"
 
-  if PATH="$tui_bin" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if PATH="$tui_bin" CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     printf 'Expected tui to fail with missing dependencies\n' >&2
     return 1
   fi
 
   assert_contains "$output" "Missing TUI dependencies"
-  assert_contains "$output" "omarchy pkg add jq"
+  assert_contains "$output" "sudo pacman -S --needed jq"
 }
 
 test_installer_installs_local_checkout_wrapper() {
@@ -696,18 +695,18 @@ test_installer_installs_local_checkout_wrapper() {
   local output="$TMP_DIR/install.out"
   local config="$TMP_DIR/installed-config.json"
 
-  OMARCHY_BACKUP_INSTALL_DIR="$install_dir" \
-    OMARCHY_BACKUP_BIN_DIR="$bin_dir" \
+  CUSTOS_INSTALL_DIR="$install_dir" \
+    CUSTOS_BIN_DIR="$bin_dir" \
     "$ROOT_DIR/scripts/install.sh" --no-deps >"$output" 2>&1
 
-  if [[ ! -x "$bin_dir/omarchy-backup" ]]; then
-    printf 'Expected installed wrapper at %s\n' "$bin_dir/omarchy-backup" >&2
+  if [[ ! -x "$bin_dir/custos" ]]; then
+    printf 'Expected installed wrapper at %s\n' "$bin_dir/custos" >&2
     return 1
   fi
 
-  OMARCHY_BACKUP_CONFIG="$config" "$bin_dir/omarchy-backup" config show >"$TMP_DIR/installed-config.out"
+  CUSTOS_CONFIG="$config" "$bin_dir/custos" config show >"$TMP_DIR/installed-config.out"
 
-  assert_contains "$output" "Installed omarchy-backup"
+  assert_contains "$output" "Installed custos"
   assert_contains "$TMP_DIR/installed-config.out" '"version": 1'
 }
 
@@ -718,8 +717,8 @@ test_uninstall_removes_installed_files_config_and_state() {
   local state_dir="$TMP_DIR/uninstall-state"
   local output="$TMP_DIR/uninstall.out"
 
-  OMARCHY_BACKUP_INSTALL_DIR="$install_dir" \
-    OMARCHY_BACKUP_BIN_DIR="$bin_dir" \
+  CUSTOS_INSTALL_DIR="$install_dir" \
+    CUSTOS_BIN_DIR="$bin_dir" \
     "$ROOT_DIR/scripts/install.sh" --no-deps >"$TMP_DIR/uninstall-install.out" 2>&1
 
   mkdir -p "$(dirname -- "$config")" "$state_dir"
@@ -727,11 +726,11 @@ test_uninstall_removes_installed_files_config_and_state() {
   printf 'state\n' >"$state_dir/keep"
 
   PATH="$bin_dir:$PATH" \
-    OMARCHY_BACKUP_CONFIG="$config" \
-    OMARCHY_BACKUP_STATE_DIR="$state_dir" \
-    "$bin_dir/omarchy-backup" uninstall --yes >"$output" 2>&1
+    CUSTOS_CONFIG="$config" \
+    CUSTOS_STATE_DIR="$state_dir" \
+    "$bin_dir/custos" uninstall --yes >"$output" 2>&1
 
-  if [[ -e "$bin_dir/omarchy-backup" ]]; then
+  if [[ -e "$bin_dir/custos" ]]; then
     printf 'Expected wrapper to be removed\n' >&2
     return 1
   fi
@@ -744,7 +743,7 @@ test_uninstall_removes_installed_files_config_and_state() {
     return 1
   fi
 
-  assert_contains "$output" "Uninstalled omarchy-backup"
+  assert_contains "$output" "Uninstalled custos"
 }
 
 test_uninstall_can_keep_local_data() {
@@ -754,8 +753,8 @@ test_uninstall_can_keep_local_data() {
   local state_dir="$TMP_DIR/uninstall-keep-state"
   local output="$TMP_DIR/uninstall-keep.out"
 
-  OMARCHY_BACKUP_INSTALL_DIR="$install_dir" \
-    OMARCHY_BACKUP_BIN_DIR="$bin_dir" \
+  CUSTOS_INSTALL_DIR="$install_dir" \
+    CUSTOS_BIN_DIR="$bin_dir" \
     "$ROOT_DIR/scripts/install.sh" --no-deps >"$TMP_DIR/uninstall-keep-install.out" 2>&1
 
   mkdir -p "$(dirname -- "$config")" "$state_dir"
@@ -763,9 +762,9 @@ test_uninstall_can_keep_local_data() {
   printf 'state\n' >"$state_dir/keep"
 
   PATH="$bin_dir:$PATH" \
-    OMARCHY_BACKUP_CONFIG="$config" \
-    OMARCHY_BACKUP_STATE_DIR="$state_dir" \
-    "$bin_dir/omarchy-backup" uninstall --yes --keep-local-data >"$output" 2>&1
+    CUSTOS_CONFIG="$config" \
+    CUSTOS_STATE_DIR="$state_dir" \
+    "$bin_dir/custos" uninstall --yes --keep-local-data >"$output" 2>&1
 
   if [[ ! -f "$config" || ! -f "$state_dir/keep" ]]; then
     printf 'Expected config and state to be kept with --keep-local-data\n' >&2
@@ -798,7 +797,7 @@ run_test "environment password supports TUI-style flow" test_environment_passwor
 run_test "failing password command falls back to interactive prompt" test_failing_password_command_falls_back_to_interactive
 run_test "backend failure gets a user-facing hint" test_backend_failure_gets_user_hint
 run_test "config restore works without existing config" test_config_restore_works_without_existing_config
-run_test "missing dependency guidance uses noninteractive Omarchy command" test_missing_dependencies_use_noninteractive_omarchy_command
+run_test "missing dependency guidance uses pacman" test_missing_dependencies_use_pacman_command
 run_test "remote setup suppresses rclone token output" test_remote_setup_suppresses_rclone_token_output
 run_test "tui first-run exit starts cleanly" test_tui_first_run_exit_starts_cleanly
 run_test "tui configured exit starts cleanly" test_tui_configured_exit_starts_cleanly
@@ -813,7 +812,7 @@ run_test "tui snapshot header is orange when focused" test_tui_snapshot_header_i
 run_test "tui session password bootstraps snapshots" test_tui_session_password_bootstraps_snapshots
 run_test "tui retries until session password works" test_tui_retries_until_session_password_works
 run_test "tui backup shows running state and delta" test_tui_backup_shows_running_state_and_delta
-run_test "tui missing dependencies use omarchy pkg add" test_tui_missing_dependencies_use_omarchy_pkg_add
+run_test "tui missing dependencies use pacman" test_tui_missing_dependencies_use_pacman
 run_test "installer installs local checkout wrapper" test_installer_installs_local_checkout_wrapper
 run_test "uninstall removes installed files config and state" test_uninstall_removes_installed_files_config_and_state
 run_test "uninstall can keep local data" test_uninstall_can_keep_local_data

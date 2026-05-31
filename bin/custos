@@ -1,28 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OMARCHY_BACKUP_LIB_DIR="${OMARCHY_BACKUP_LIB_DIR:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)}"
-OMARCHY_BACKUP_BIN="${OMARCHY_BACKUP_BIN:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/omarchy-backup}"
+CUSTOS_LIB_DIR="${CUSTOS_LIB_DIR:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)}"
+CUSTOS_BIN="${CUSTOS_BIN:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/custos}"
 
 # shellcheck source=../lib/logging.sh
-source "$OMARCHY_BACKUP_LIB_DIR/logging.sh"
+source "$CUSTOS_LIB_DIR/logging.sh"
 # shellcheck source=../lib/config.sh
-source "$OMARCHY_BACKUP_LIB_DIR/config.sh"
+source "$CUSTOS_LIB_DIR/config.sh"
 # shellcheck source=../lib/restic.sh
-source "$OMARCHY_BACKUP_LIB_DIR/restic.sh"
+source "$CUSTOS_LIB_DIR/restic.sh"
 # shellcheck source=../lib/status.sh
-source "$OMARCHY_BACKUP_LIB_DIR/status.sh"
+source "$CUSTOS_LIB_DIR/status.sh"
 # shellcheck source=../lib/restore.sh
-source "$OMARCHY_BACKUP_LIB_DIR/restore.sh"
+source "$CUSTOS_LIB_DIR/restore.sh"
 # shellcheck source=../lib/password.sh
-source "$OMARCHY_BACKUP_LIB_DIR/password.sh"
+source "$CUSTOS_LIB_DIR/password.sh"
 # shellcheck source=../lib/tui.sh
-source "$OMARCHY_BACKUP_LIB_DIR/tui.sh"
+source "$CUSTOS_LIB_DIR/tui.sh"
 
 usage() {
   cat <<'USAGE'
 Usage:
-  omarchy-backup <command> [args]
+  custos <command> [args]
 
 Commands:
   setup                        Configure remote storage and initialize repository
@@ -62,8 +62,8 @@ Options accepted by restore:
   --yes                        Skip confirmation prompt
 
 Environment:
-  OMARCHY_BACKUP_CONFIG        Override config path
-  OMARCHY_BACKUP_DRY_RUN       Set to 1 to print backend commands
+  CUSTOS_CONFIG        Override config path
+  CUSTOS_DRY_RUN       Set to 1 to print backend commands
 USAGE
 }
 
@@ -87,8 +87,8 @@ require_runtime_dependencies() {
   if ((${#missing[@]} > 0)); then
     log_error "Missing required dependencies: ${missing[*]}"
     log_info "Install them with:"
-    log_info "  omarchy pkg add ${missing[*]}"
-    log_info "Then rerun: omarchy-backup doctor"
+    log_info "  sudo pacman -S --needed ${missing[*]}"
+    log_info "Then rerun: custos doctor"
     exit 1
   fi
 
@@ -98,7 +98,7 @@ cmd_doctor() {
   local failed=0
   local command_name
 
-  printf 'Checking omarchy-backup environment...\n'
+  printf 'Checking custos environment...\n'
 
   for command_name in jq restic rclone; do
     if require_command "$command_name"; then
@@ -141,7 +141,7 @@ cmd_doctor() {
 
   if ((failed)); then
     printf '\nInstall missing dependencies with:\n'
-    printf '  omarchy pkg add jq restic rclone\n'
+    printf '  sudo pacman -S --needed jq restic rclone\n'
     return 1
   fi
 
@@ -163,7 +163,7 @@ cmd_config() {
       ;;
     edit)
       config_ensure_exists
-      "${EDITOR:-vi}" "$OMARCHY_BACKUP_CONFIG"
+      "${EDITOR:-vi}" "$CUSTOS_CONFIG"
       ;;
     restore)
       config_restore_from_repository "$@"
@@ -171,10 +171,10 @@ cmd_config() {
     ""|-h|--help|help)
       cat <<'USAGE'
 Usage:
-  omarchy-backup config show
-  omarchy-backup config validate
-  omarchy-backup config edit
-  omarchy-backup config restore [--repository <url>] [--yes]
+  custos config show
+  custos config validate
+  custos config edit
+  custos config restore [--repository <url>] [--yes]
 USAGE
       ;;
     *)
@@ -235,23 +235,23 @@ config_restore_from_repository() {
     esac
   fi
 
-  if [[ -f "$OMARCHY_BACKUP_CONFIG" && "$yes" != "1" ]]; then
-    die "Config already exists at $OMARCHY_BACKUP_CONFIG. Use --yes to overwrite."
+  if [[ -f "$CUSTOS_CONFIG" && "$yes" != "1" ]]; then
+    die "Config already exists at $CUSTOS_CONFIG. Use --yes to overwrite."
   fi
 
   target_dir="$(mktemp -d)"
   restored_config="$target_dir/config.json"
 
-  rclone copyto "${remote_name}:${remote_path}/.omarchy-backup/config.json" "$restored_config" >/dev/null ||
-    die "No omarchy-backup config found at ${remote_name}:${remote_path}/.omarchy-backup/config.json"
+  rclone copyto "${remote_name}:${remote_path}/.custos/config.json" "$restored_config" >/dev/null ||
+    die "No custos config found at ${remote_name}:${remote_path}/.custos/config.json"
 
   jq -e . "$restored_config" >/dev/null || die "Restored config is not valid JSON"
 
-  config_dir="$(dirname -- "$OMARCHY_BACKUP_CONFIG")"
+  config_dir="$(dirname -- "$CUSTOS_CONFIG")"
   mkdir -p "$config_dir"
-  cp "$restored_config" "$OMARCHY_BACKUP_CONFIG"
+  cp "$restored_config" "$CUSTOS_CONFIG"
   rm -rf "$target_dir"
-  log_success "Restored config to $OMARCHY_BACKUP_CONFIG"
+  log_success "Restored config to $CUSTOS_CONFIG"
 }
 
 cmd_init() {
@@ -296,9 +296,9 @@ cmd_uninstall() {
       -h|--help|help)
         cat <<'USAGE'
 Usage:
-  omarchy-backup uninstall [--yes] [--dry-run] [--keep-local-data] [--force]
+  custos uninstall [--yes] [--dry-run] [--keep-local-data] [--force]
 
-Removes the installed omarchy-backup command wrapper, app files, local config,
+Removes the installed custos command wrapper, app files, local config,
 and local state. Backup repositories and rclone remotes are left alone.
 
 Options:
@@ -315,11 +315,11 @@ USAGE
     esac
   done
 
-  install_bin="${OMARCHY_BACKUP_BIN:-$0}"
+  install_bin="${CUSTOS_BIN:-$0}"
   install_dir="$(cd -- "$(dirname -- "$install_bin")/.." && pwd)"
-  wrapper="$(command -v omarchy-backup 2>/dev/null || true)"
-  config_dir="$(dirname -- "$OMARCHY_BACKUP_CONFIG")"
-  state_dir="$OMARCHY_BACKUP_STATE_DIR"
+  wrapper="$(command -v custos 2>/dev/null || true)"
+  config_dir="$(dirname -- "$CUSTOS_CONFIG")"
+  state_dir="$CUSTOS_STATE_DIR"
 
   if [[ "$force" != "1" && ( -d "$install_dir/.git" || -f "$install_dir/scripts/install.sh" ) ]]; then
     log_error "Refusing to uninstall from a source checkout: $install_dir"
@@ -366,7 +366,7 @@ USAGE
     rm -rf -- "$config_dir" "$state_dir"
   fi
 
-  log_success "Uninstalled omarchy-backup."
+  log_success "Uninstalled custos."
 }
 
 cmd_backup() {
@@ -445,8 +445,8 @@ cmd_remote() {
     ""|-h|--help|help)
       cat <<'USAGE'
 Usage:
-  omarchy-backup remote setup
-  omarchy-backup remote check
+  custos remote setup
+  custos remote check
 USAGE
       ;;
     *)
@@ -472,8 +472,8 @@ cmd_password() {
     ""|-h|--help|help)
       cat <<'USAGE'
 Usage:
-  omarchy-backup password setup
-  omarchy-backup password status
+  custos password setup
+  custos password status
 USAGE
       ;;
     *)
@@ -500,30 +500,30 @@ cmd_paths() {
 
       case "$action" in
         add)
-          [[ -n "$value" ]] || die "Usage: omarchy-backup paths $kind add <path-or-pattern>"
+          [[ -n "$value" ]] || die "Usage: custos paths $kind add <path-or-pattern>"
           value="$(config_compact_home_path "$value")"
           config_paths_add "$kind" "$value"
           log_success "Added $kind: $value"
           ;;
         remove)
-          [[ -n "$value" ]] || die "Usage: omarchy-backup paths $kind remove <path-or-pattern>"
+          [[ -n "$value" ]] || die "Usage: custos paths $kind remove <path-or-pattern>"
           value="$(config_compact_home_path "$value")"
           config_paths_remove "$kind" "$value"
           log_success "Removed $kind: $value"
           ;;
         *)
-          die "Usage: omarchy-backup paths $kind <add|remove> <path-or-pattern>"
+          die "Usage: custos paths $kind <add|remove> <path-or-pattern>"
           ;;
       esac
       ;;
     ""|-h|--help|help)
       cat <<'USAGE'
 Usage:
-  omarchy-backup paths list
-  omarchy-backup paths include add <path>
-  omarchy-backup paths include remove <path>
-  omarchy-backup paths exclude add <pattern>
-  omarchy-backup paths exclude remove <pattern>
+  custos paths list
+  custos paths include add <path>
+  custos paths include remove <path>
+  custos paths exclude add <pattern>
+  custos paths exclude remove <pattern>
 USAGE
       ;;
     *)

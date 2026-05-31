@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_OWNER="${OMARCHY_BACKUP_REPO_OWNER:-inheritweb}"
-REPO_NAME="${OMARCHY_BACKUP_REPO_NAME:-omarchy-backup}"
-REPO_REF="${OMARCHY_BACKUP_REF:-main}"
-INSTALL_DIR="${OMARCHY_BACKUP_INSTALL_DIR:-$HOME/.local/share/omarchy-backup}"
-BIN_DIR="${OMARCHY_BACKUP_BIN_DIR:-$HOME/.local/bin}"
+REPO_OWNER="${CUSTOS_REPO_OWNER:-inheritweb}"
+REPO_NAME="${CUSTOS_REPO_NAME:-custos}"
+REPO_REF="${CUSTOS_REF:-main}"
+INSTALL_DIR="${CUSTOS_INSTALL_DIR:-$HOME/.local/share/custos}"
+BIN_DIR="${CUSTOS_BIN_DIR:-$HOME/.local/bin}"
 INSTALL_DEPS=1
 DRY_RUN=0
 
@@ -23,9 +23,9 @@ Options:
   -h, --help            Show this help
 
 Environment:
-  OMARCHY_BACKUP_REF
-  OMARCHY_BACKUP_INSTALL_DIR
-  OMARCHY_BACKUP_BIN_DIR
+  CUSTOS_REF
+  CUSTOS_INSTALL_DIR
+  CUSTOS_BIN_DIR
 USAGE
 }
 
@@ -112,12 +112,6 @@ install_dependencies() {
     return 0
   }
 
-  if require_command omarchy; then
-    log "Installing packages with Omarchy: ${missing[*]}"
-    run omarchy pkg add "${missing[@]}"
-    return 0
-  fi
-
   if require_command pacman; then
     log "Installing packages with pacman: ${missing[*]}"
     run sudo pacman -S --needed "${missing[@]}"
@@ -164,7 +158,7 @@ install_files() {
 }
 
 install_wrapper() {
-  local wrapper="$BIN_DIR/omarchy-backup"
+  local wrapper="$BIN_DIR/custos"
 
   log "Installing command wrapper to $wrapper"
   if [[ "$DRY_RUN" == "1" ]]; then
@@ -174,9 +168,9 @@ install_wrapper() {
 
   cat >"$wrapper" <<WRAPPER
 #!/usr/bin/env bash
-export OMARCHY_BACKUP_LIB_DIR="${INSTALL_DIR}/lib"
-export OMARCHY_BACKUP_BIN="${INSTALL_DIR}/bin/omarchy-backup"
-exec "${INSTALL_DIR}/bin/omarchy-backup" "\$@"
+export CUSTOS_LIB_DIR="${INSTALL_DIR}/lib"
+export CUSTOS_BIN="${INSTALL_DIR}/bin/custos"
+exec "${INSTALL_DIR}/bin/custos" "\$@"
 WRAPPER
   chmod +x "$wrapper"
 }
@@ -186,7 +180,7 @@ install_from_checkout() {
   script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
   source_dir="$(cd -- "$script_dir/.." && pwd)"
 
-  [[ -f "$source_dir/bin/omarchy-backup" && -d "$source_dir/lib" ]] || return 1
+  [[ -f "$source_dir/bin/custos" && -d "$source_dir/lib" ]] || return 1
   install_files "$source_dir"
 }
 
@@ -207,8 +201,8 @@ main() {
   fi
 
   install_wrapper
-  log "Installed omarchy-backup."
-  log "Run: omarchy-backup doctor"
+  log "Installed custos."
+  log "Run: custos doctor"
 }
 
 main "$@"

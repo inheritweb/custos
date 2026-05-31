@@ -38,13 +38,13 @@ tui_require_dependencies() {
   if ((${#missing[@]} > 0)); then
     log_error "Missing TUI dependencies: ${missing[*]}"
     log_info "Install them with:"
-    log_info "  omarchy pkg add ${missing[*]}"
+    log_info "  sudo pacman -S --needed ${missing[*]}"
     exit 1
   fi
 }
 
 tui_cli() {
-  "$OMARCHY_BACKUP_BIN" "$@"
+  "$CUSTOS_BIN" "$@"
 }
 
 tui_enter_screen() {
@@ -86,7 +86,7 @@ tui_clear_line() {
 }
 
 tui_config_exists() {
-  [[ -f "$OMARCHY_BACKUP_CONFIG" ]]
+  [[ -f "$CUSTOS_CONFIG" ]]
 }
 
 tui_repeat() {
@@ -188,9 +188,9 @@ tui_has_selected_snapshot() {
 
 tui_read_key() {
   TUI_KEY=""
-  if [[ -n "${OMARCHY_BACKUP_TUI_KEYS:-}" ]]; then
-    TUI_KEY="${OMARCHY_BACKUP_TUI_KEYS:0:1}"
-    OMARCHY_BACKUP_TUI_KEYS="${OMARCHY_BACKUP_TUI_KEYS:1}"
+  if [[ -n "${CUSTOS_TUI_KEYS:-}" ]]; then
+    TUI_KEY="${CUSTOS_TUI_KEYS:0:1}"
+    CUSTOS_TUI_KEYS="${CUSTOS_TUI_KEYS:1}"
     return 0
   fi
 
@@ -207,9 +207,9 @@ tui_read_key() {
 tui_read_line() {
   local prompt="$1"
   local value=""
-  if [[ -n "${OMARCHY_BACKUP_TUI_INPUT:-}" ]]; then
-    value="$OMARCHY_BACKUP_TUI_INPUT"
-    OMARCHY_BACKUP_TUI_INPUT=""
+  if [[ -n "${CUSTOS_TUI_INPUT:-}" ]]; then
+    value="$CUSTOS_TUI_INPUT"
+    CUSTOS_TUI_INPUT=""
     printf '%s' "$value"
     return 0
   fi
@@ -222,13 +222,13 @@ tui_read_line() {
 tui_read_password() {
   local prompt="$1"
   TUI_PASSWORD_VALUE=""
-  if [[ -n "${OMARCHY_BACKUP_TUI_PASSWORD:-}" ]]; then
-    if [[ "$OMARCHY_BACKUP_TUI_PASSWORD" == *$'\n'* ]]; then
-      TUI_PASSWORD_VALUE="${OMARCHY_BACKUP_TUI_PASSWORD%%$'\n'*}"
-      OMARCHY_BACKUP_TUI_PASSWORD="${OMARCHY_BACKUP_TUI_PASSWORD#*$'\n'}"
+  if [[ -n "${CUSTOS_TUI_PASSWORD:-}" ]]; then
+    if [[ "$CUSTOS_TUI_PASSWORD" == *$'\n'* ]]; then
+      TUI_PASSWORD_VALUE="${CUSTOS_TUI_PASSWORD%%$'\n'*}"
+      CUSTOS_TUI_PASSWORD="${CUSTOS_TUI_PASSWORD#*$'\n'}"
     else
-      TUI_PASSWORD_VALUE="$OMARCHY_BACKUP_TUI_PASSWORD"
-      OMARCHY_BACKUP_TUI_PASSWORD=""
+      TUI_PASSWORD_VALUE="$CUSTOS_TUI_PASSWORD"
+      CUSTOS_TUI_PASSWORD=""
     fi
     return 0
   fi
@@ -251,26 +251,26 @@ tui_config_summary_lines() {
   if ! tui_config_exists; then
     cat <<'SUMMARY'
 No local config found
-Remote not connected for omarchy-backup yet
+Remote not connected for custos yet
 Use actions below to connect Google Drive or restore/create config
 SUMMARY
     return 0
   fi
 
   local profile remote_type remote_name remote_path include_count exclude_count
-  profile="$(jq -r '.profile // "default"' "$OMARCHY_BACKUP_CONFIG")"
-  remote_type="$(jq -r '.remote.type // "unknown"' "$OMARCHY_BACKUP_CONFIG")"
-  remote_name="$(jq -r '.remote.name // "gdrive"' "$OMARCHY_BACKUP_CONFIG")"
-  remote_path="$(jq -r '.remote.path // "backups/home"' "$OMARCHY_BACKUP_CONFIG")"
-  include_count="$(jq -r '.paths.include | length' "$OMARCHY_BACKUP_CONFIG")"
-  exclude_count="$(jq -r '.paths.exclude | length' "$OMARCHY_BACKUP_CONFIG")"
+  profile="$(jq -r '.profile // "default"' "$CUSTOS_CONFIG")"
+  remote_type="$(jq -r '.remote.type // "unknown"' "$CUSTOS_CONFIG")"
+  remote_name="$(jq -r '.remote.name // "gdrive"' "$CUSTOS_CONFIG")"
+  remote_path="$(jq -r '.remote.path // "backups/home"' "$CUSTOS_CONFIG")"
+  include_count="$(jq -r '.paths.include | length' "$CUSTOS_CONFIG")"
+  exclude_count="$(jq -r '.paths.exclude | length' "$CUSTOS_CONFIG")"
 
   cat <<SUMMARY
 Profile      $profile
 Remote       $remote_type / ${remote_name}:${remote_path}
 Includes     $include_count paths
 Excludes     $exclude_count patterns
-Config       $OMARCHY_BACKUP_CONFIG
+Config       $CUSTOS_CONFIG
 SUMMARY
 }
 
@@ -489,8 +489,8 @@ tui_probe_remote_state() {
 
   tui_config_exists || return 0
 
-  remote_type="$(jq -r '.remote.type // "google-drive"' "$OMARCHY_BACKUP_CONFIG")"
-  remote_name="$(jq -r '.remote.name // "gdrive"' "$OMARCHY_BACKUP_CONFIG" | sed 's/:$//')"
+  remote_type="$(jq -r '.remote.type // "google-drive"' "$CUSTOS_CONFIG")"
+  remote_name="$(jq -r '.remote.name // "gdrive"' "$CUSTOS_CONFIG" | sed 's/:$//')"
   [[ -n "$remote_name" ]] || remote_name="gdrive"
 
   if [[ "$remote_type" != "google-drive" ]]; then
@@ -519,13 +519,13 @@ tui_repository_config_exists() {
 
   tui_config_exists || return 1
 
-  remote_type="$(jq -r '.remote.type // "google-drive"' "$OMARCHY_BACKUP_CONFIG")"
+  remote_type="$(jq -r '.remote.type // "google-drive"' "$CUSTOS_CONFIG")"
   if [[ "$remote_type" != "google-drive" ]]; then
     return 0
   fi
 
-  remote_name="$(jq -r '.remote.name // "gdrive"' "$OMARCHY_BACKUP_CONFIG" | sed 's/:$//')"
-  remote_path="$(jq -r '.remote.path // "backups/home"' "$OMARCHY_BACKUP_CONFIG")"
+  remote_name="$(jq -r '.remote.name // "gdrive"' "$CUSTOS_CONFIG" | sed 's/:$//')"
+  remote_path="$(jq -r '.remote.path // "backups/home"' "$CUSTOS_CONFIG")"
   [[ -n "$remote_name" ]] || remote_name="gdrive"
 
   rclone lsf "${remote_name}:${remote_path}" --files-only 2>/dev/null | grep -Fxq "config"
@@ -1007,7 +1007,7 @@ tui_main() {
   trap 'tui_exit_screen' EXIT
   trap 'tui_exit_screen; trap - EXIT; exit 130' INT TERM
 
-  TUI_STATUS="Starting omarchy-backup..."
+  TUI_STATUS="Starting custos..."
   tui_render
 
   if tui_config_exists; then
@@ -1038,7 +1038,7 @@ tui_main() {
       $'\n') tui_activate_action || [[ "$?" != "2" ]] || break ;;
     esac
 
-    if [[ -z "${OMARCHY_BACKUP_TUI_KEYS:-}" && ! -e /dev/tty ]]; then
+    if [[ -z "${CUSTOS_TUI_KEYS:-}" && ! -e /dev/tty ]]; then
       break
     fi
   done

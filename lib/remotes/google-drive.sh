@@ -16,7 +16,7 @@ remote_setup() {
   if rclone listremotes | grep -Fxq "${name}:"; then
     log_success "Found rclone remote: ${name}:"
   else
-    if [[ "${OMARCHY_BACKUP_DRY_RUN:-0}" == "1" ]]; then
+    if [[ "${CUSTOS_DRY_RUN:-0}" == "1" ]]; then
       log_info "Dry run: would create Google Drive remote: ${name}:"
       return 0
     fi
@@ -36,7 +36,7 @@ remote_check() {
   path="$(remote_path)"
   [[ -n "$name" ]] || name="gdrive"
 
-  if [[ "${OMARCHY_BACKUP_DRY_RUN:-0}" == "1" ]]; then
+  if [[ "${CUSTOS_DRY_RUN:-0}" == "1" ]]; then
     log_info "Dry run: skipping rclone remote check for ${name}:${path}"
     return 0
   fi
@@ -57,7 +57,7 @@ remote_repository_url() {
 remote_config_path() {
   local path
   path="$(remote_path)"
-  printf '%s/.omarchy-backup/config.json\n' "$path"
+  printf '%s/.custos/config.json\n' "$path"
 }
 
 remote_config_upload() {
@@ -70,7 +70,7 @@ remote_config_upload() {
   config_path="$(remote_config_path)"
   [[ -n "$name" ]] || name="gdrive"
 
-  if [[ "${OMARCHY_BACKUP_DRY_RUN:-0}" == "1" ]]; then
+  if [[ "${CUSTOS_DRY_RUN:-0}" == "1" ]]; then
     log_info "Dry run: would upload config to ${name}:${config_path}"
     return 0
   fi

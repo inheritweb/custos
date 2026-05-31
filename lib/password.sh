@@ -7,7 +7,7 @@ password_setup() {
   if [[ -z "$password_command" ]]; then
     log_info "No stored backup password is configured."
     log_info "Backup commands will ask for the repository password when needed."
-    log_info "For unattended backups, add secrets.passwordCommand to: $OMARCHY_BACKUP_CONFIG"
+    log_info "For unattended backups, add secrets.passwordCommand to: $CUSTOS_CONFIG"
     return 0
   fi
 
@@ -31,7 +31,7 @@ password_setup() {
       log_info "Configured password command:"
       log_info "  $password_command"
       log_warn "Automatic setup is only supported for password commands using: pass show <name>"
-      log_info "Create the secret using your password manager, then rerun: omarchy-backup doctor"
+      log_info "Create the secret using your password manager, then rerun: custos doctor"
       ;;
   esac
 }
@@ -91,8 +91,8 @@ password_check() {
   if ! command -v "${password_command%% *}" >/dev/null 2>&1; then
     log_error "Backup password manager is not installed: ${password_command%% *}"
     log_info "Install it with:"
-    log_info "  omarchy pkg add ${password_command%% *}"
-    log_info "Or choose a different password command in: $OMARCHY_BACKUP_CONFIG"
+    log_info "  sudo pacman -S --needed ${password_command%% *}"
+    log_info "Or choose a different password command in: $CUSTOS_CONFIG"
     exit 1
   fi
 
@@ -101,7 +101,7 @@ password_check() {
     log_info "Configured command:"
     log_info "  $password_command"
     log_info "Run:"
-    log_info "  omarchy-backup password setup"
+    log_info "  custos password setup"
     exit 1
   fi
 }

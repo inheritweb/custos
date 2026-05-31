@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 
-OMARCHY_BACKUP_CONFIG="${OMARCHY_BACKUP_CONFIG:-$HOME/.config/omarchy-backup/config.json}"
-OMARCHY_BACKUP_STATE_DIR="${OMARCHY_BACKUP_STATE_DIR:-$HOME/.local/state/omarchy-backup}"
-OMARCHY_BACKUP_REPOSITORY_CONFIG_PATH="/.omarchy-backup/config.json"
+CUSTOS_CONFIG="${CUSTOS_CONFIG:-$HOME/.config/custos/config.json}"
+CUSTOS_STATE_DIR="${CUSTOS_STATE_DIR:-$HOME/.local/state/custos}"
+CUSTOS_REPOSITORY_CONFIG_PATH="/.custos/config.json"
 
 config_ensure_exists() {
-  if [[ -f "$OMARCHY_BACKUP_CONFIG" ]]; then
+  if [[ -f "$CUSTOS_CONFIG" ]]; then
     return 0
   fi
 
   local config_dir
-  config_dir="$(dirname -- "$OMARCHY_BACKUP_CONFIG")"
+  config_dir="$(dirname -- "$CUSTOS_CONFIG")"
   mkdir -p "$config_dir"
 
-  cat >"$OMARCHY_BACKUP_CONFIG" <<'JSON'
+  cat >"$CUSTOS_CONFIG" <<'JSON'
 {
   "version": 1,
   "profile": "default",
@@ -52,24 +52,24 @@ config_ensure_exists() {
   }
 }
 JSON
-  log_info "Created default config at $OMARCHY_BACKUP_CONFIG"
+  log_info "Created default config at $CUSTOS_CONFIG"
 }
 
 config_print() {
   config_ensure_exists
-  jq . "$OMARCHY_BACKUP_CONFIG"
+  jq . "$CUSTOS_CONFIG"
 }
 
 config_get() {
   local query="$1"
   config_ensure_exists
-  jq -er "$query" "$OMARCHY_BACKUP_CONFIG"
+  jq -er "$query" "$CUSTOS_CONFIG"
 }
 
 config_get_optional() {
   local query="$1"
   config_ensure_exists
-  jq -r "$query // empty" "$OMARCHY_BACKUP_CONFIG"
+  jq -r "$query // empty" "$CUSTOS_CONFIG"
 }
 
 config_validate() {
@@ -84,7 +84,7 @@ config_validate() {
     (.retention.daily | type == "number") and
     (.retention.weekly | type == "number") and
     (.retention.monthly | type == "number")
-  ' "$OMARCHY_BACKUP_CONFIG" >/dev/null || die "Invalid config: $OMARCHY_BACKUP_CONFIG"
+  ' "$CUSTOS_CONFIG" >/dev/null || die "Invalid config: $CUSTOS_CONFIG"
 }
 
 config_expand_path() {
@@ -107,23 +107,23 @@ config_compact_home_path() {
 
 config_include_paths() {
   config_ensure_exists
-  jq -r '.paths.include[]' "$OMARCHY_BACKUP_CONFIG" | while IFS= read -r path; do
+  jq -r '.paths.include[]' "$CUSTOS_CONFIG" | while IFS= read -r path; do
     config_expand_path "$path"
   done
 }
 
 config_exclude_patterns() {
   config_ensure_exists
-  jq -r '.paths.exclude[]' "$OMARCHY_BACKUP_CONFIG"
+  jq -r '.paths.exclude[]' "$CUSTOS_CONFIG"
 }
 
 config_paths_list() {
   config_ensure_exists
 
   printf 'Include paths:\n'
-  jq -r '.paths.include[] | "  - " + .' "$OMARCHY_BACKUP_CONFIG"
+  jq -r '.paths.include[] | "  - " + .' "$CUSTOS_CONFIG"
   printf 'Exclude patterns:\n'
-  jq -r '.paths.exclude[] | "  - " + .' "$OMARCHY_BACKUP_CONFIG"
+  jq -r '.paths.exclude[] | "  - " + .' "$CUSTOS_CONFIG"
 }
 
 config_paths_add() {
@@ -141,8 +141,8 @@ config_paths_add() {
 
   jq --arg value "$value" --arg kind "$kind" '
     .paths[$kind] = ((.paths[$kind] + [$value]) | unique)
-  ' "$OMARCHY_BACKUP_CONFIG" >"$tmp_file"
-  mv "$tmp_file" "$OMARCHY_BACKUP_CONFIG"
+  ' "$CUSTOS_CONFIG" >"$tmp_file"
+  mv "$tmp_file" "$CUSTOS_CONFIG"
 }
 
 config_paths_remove() {
@@ -160,12 +160,12 @@ config_paths_remove() {
 
   jq --arg value "$value" --arg kind "$kind" '
     .paths[$kind] = (.paths[$kind] | map(select(. != $value)))
-  ' "$OMARCHY_BACKUP_CONFIG" >"$tmp_file"
-  mv "$tmp_file" "$OMARCHY_BACKUP_CONFIG"
+  ' "$CUSTOS_CONFIG" >"$tmp_file"
+  mv "$tmp_file" "$CUSTOS_CONFIG"
 }
 
 config_password_command() {
-  if [[ ! -f "$OMARCHY_BACKUP_CONFIG" ]]; then
+  if [[ ! -f "$CUSTOS_CONFIG" ]]; then
     return 0
   fi
 
@@ -183,7 +183,7 @@ config_hostname() {
 }
 
 config_repository_export_path() {
-  printf '%s/repository-config%s\n' "$OMARCHY_BACKUP_STATE_DIR" "$OMARCHY_BACKUP_REPOSITORY_CONFIG_PATH"
+  printf '%s/repository-config%s\n' "$CUSTOS_STATE_DIR" "$CUSTOS_REPOSITORY_CONFIG_PATH"
 }
 
 config_export_for_repository() {
@@ -196,8 +196,8 @@ config_export_for_repository() {
 
   jq '
     del(.secrets)
-    | .metadata.omarchyBackupExportedAt = now | .metadata.omarchyBackupConfigPath = "'"$OMARCHY_BACKUP_CONFIG"'"
-  ' "$OMARCHY_BACKUP_CONFIG" >"$export_path" || return 1
+    | .metadata.custosExportedAt = now | .metadata.custosConfigPath = "'"$CUSTOS_CONFIG"'"
+  ' "$CUSTOS_CONFIG" >"$export_path" || return 1
 
   printf '%s\n' "$export_path"
 }

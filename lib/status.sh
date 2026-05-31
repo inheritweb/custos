@@ -8,7 +8,7 @@ status_show() {
   local repository
   repository="$(remote_repository_url)"
 
-  printf 'Config: %s\n' "$OMARCHY_BACKUP_CONFIG"
+  printf 'Config: %s\n' "$CUSTOS_CONFIG"
   printf 'Repository: %s\n' "$repository"
   printf 'Remote type: %s\n' "$(config_get '.remote.type')"
   printf 'Hostname: %s\n' "$(config_hostname)"

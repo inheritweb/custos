@@ -3,7 +3,7 @@
 remote_load() {
   local remote_type remote_file
   remote_type="$(config_get '.remote.type')"
-  remote_file="$OMARCHY_BACKUP_LIB_DIR/remotes/${remote_type}.sh"
+  remote_file="$CUSTOS_LIB_DIR/remotes/${remote_type}.sh"
 
   [[ -f "$remote_file" ]] || die "Unsupported remote type: $remote_type"
   # shellcheck source=/dev/null
@@ -16,9 +16,9 @@ restic_prepare_password() {
   unset RESTIC_PASSWORD_COMMAND
 
   if [[ -n "${RESTIC_PASSWORD:-}" ]]; then
-    if [[ "${OMARCHY_BACKUP_PASSWORD_NOTICE_SHOWN:-0}" != "1" ]]; then
+    if [[ "${CUSTOS_PASSWORD_NOTICE_SHOWN:-0}" != "1" ]]; then
       log_info "Using password supplied by the current environment."
-      OMARCHY_BACKUP_PASSWORD_NOTICE_SHOWN=1
+      CUSTOS_PASSWORD_NOTICE_SHOWN=1
     fi
     return 0
   fi
@@ -26,45 +26,45 @@ restic_prepare_password() {
   password_command="$(config_password_command)"
   if [[ -n "$password_command" ]]; then
     if ! command -v "${password_command%% *}" >/dev/null 2>&1; then
-      if [[ "${OMARCHY_BACKUP_PASSWORD_NOTICE_SHOWN:-0}" != "1" ]]; then
+      if [[ "${CUSTOS_PASSWORD_NOTICE_SHOWN:-0}" != "1" ]]; then
         log_warn "Configured backup password command is unavailable: ${password_command%% *}"
         log_info "Falling back to an interactive repository password prompt."
-        OMARCHY_BACKUP_PASSWORD_NOTICE_SHOWN=1
+        CUSTOS_PASSWORD_NOTICE_SHOWN=1
       fi
       unset RESTIC_PASSWORD_COMMAND
-      if [[ "${OMARCHY_BACKUP_DRY_RUN:-0}" != "1" ]]; then
+      if [[ "${CUSTOS_DRY_RUN:-0}" != "1" ]]; then
         password_prompt_for_backend "Repository password: "
       fi
       return 0
     fi
 
     if ! bash -lc "$password_command" >/dev/null 2>&1; then
-      if [[ "${OMARCHY_BACKUP_PASSWORD_NOTICE_SHOWN:-0}" != "1" ]]; then
+      if [[ "${CUSTOS_PASSWORD_NOTICE_SHOWN:-0}" != "1" ]]; then
         log_warn "Configured backup password command did not return a password."
         log_info "Falling back to an interactive repository password prompt."
-        OMARCHY_BACKUP_PASSWORD_NOTICE_SHOWN=1
+        CUSTOS_PASSWORD_NOTICE_SHOWN=1
       fi
       unset RESTIC_PASSWORD_COMMAND
-      if [[ "${OMARCHY_BACKUP_DRY_RUN:-0}" != "1" ]]; then
+      if [[ "${CUSTOS_DRY_RUN:-0}" != "1" ]]; then
         password_prompt_for_backend "Repository password: "
       fi
       return 0
     fi
 
     export RESTIC_PASSWORD_COMMAND="$password_command"
-    if [[ "${OMARCHY_BACKUP_PASSWORD_NOTICE_SHOWN:-0}" != "1" ]]; then
+    if [[ "${CUSTOS_PASSWORD_NOTICE_SHOWN:-0}" != "1" ]]; then
       log_info "Using configured password command for repository access."
-      OMARCHY_BACKUP_PASSWORD_NOTICE_SHOWN=1
+      CUSTOS_PASSWORD_NOTICE_SHOWN=1
     fi
     return 0
   fi
 
-  if [[ "${OMARCHY_BACKUP_PASSWORD_NOTICE_SHOWN:-0}" != "1" ]]; then
+  if [[ "${CUSTOS_PASSWORD_NOTICE_SHOWN:-0}" != "1" ]]; then
     log_info "Repository password is not stored."
-    OMARCHY_BACKUP_PASSWORD_NOTICE_SHOWN=1
+    CUSTOS_PASSWORD_NOTICE_SHOWN=1
   fi
 
-  if [[ "${OMARCHY_BACKUP_DRY_RUN:-0}" != "1" ]]; then
+  if [[ "${CUSTOS_DRY_RUN:-0}" != "1" ]]; then
     password_prompt_for_backend "Repository password: "
   fi
 }
@@ -101,7 +101,7 @@ restic_explain_password_prompt() {
 
 restic_base_args() {
   local repository
-  repository="${OMARCHY_BACKUP_REPOSITORY:-$(remote_repository_url)}"
+  repository="${CUSTOS_REPOSITORY:-$(remote_repository_url)}"
   printf '%s\0' --repo "$repository"
 }
 
@@ -111,7 +111,7 @@ restic_run() {
   local -a base_args
   mapfile -d '' -t base_args < <(restic_base_args)
 
-  if [[ "${OMARCHY_BACKUP_DRY_RUN:-0}" == "1" ]]; then
+  if [[ "${CUSTOS_DRY_RUN:-0}" == "1" ]]; then
     printf 'restic' >&2
     printf ' %q' "${base_args[@]}" "$@" >&2
     printf '\n' >&2
@@ -130,7 +130,7 @@ restic_run_with_prompt_notice() {
 }
 
 restic_require_initialized() {
-  if [[ "${OMARCHY_BACKUP_DRY_RUN:-0}" == "1" ]]; then
+  if [[ "${CUSTOS_DRY_RUN:-0}" == "1" ]]; then
     return 0
   fi
 
@@ -151,9 +151,9 @@ restic_require_initialized() {
     rm -f "$error_file"
     log_error "Restic repository is not initialized at $(remote_repository_url)"
     log_info "Run:"
-    log_info "  omarchy-backup setup"
+    log_info "  custos setup"
     log_info "or:"
-    log_info "  omarchy-backup init"
+    log_info "  custos init"
     return 1
   fi
 
@@ -234,7 +234,7 @@ restic_snapshots() {
 }
 
 restic_ls() {
-  (($# >= 1)) || die "Usage: omarchy-backup ls <snapshot> [path]"
+  (($# >= 1)) || die "Usage: custos ls <snapshot> [path]"
   restic_run_with_prompt_notice ls "$@"
 }
 
