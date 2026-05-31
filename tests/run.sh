@@ -702,7 +702,7 @@ test_installer_installs_local_checkout_wrapper() {
 
   CUSTOS_INSTALL_DIR="$install_dir" \
     CUSTOS_BIN_DIR="$bin_dir" \
-    "$ROOT_DIR/scripts/install.sh" --no-deps >"$output" 2>&1
+    "$ROOT_DIR/scripts/install.sh" >"$output" 2>&1
 
   if [[ ! -x "$bin_dir/custos" ]]; then
     printf 'Expected installed wrapper at %s\n' "$bin_dir/custos" >&2
@@ -712,6 +712,7 @@ test_installer_installs_local_checkout_wrapper() {
   CUSTOS_CONFIG="$config" "$bin_dir/custos" config show >"$TMP_DIR/installed-config.out"
 
   assert_contains "$output" "Installed custos"
+  assert_contains "$output" "Dependencies are not installed by this script"
   assert_contains "$TMP_DIR/installed-config.out" '"version": 1'
 }
 
@@ -724,7 +725,7 @@ test_uninstall_removes_installed_files_config_and_state() {
 
   CUSTOS_INSTALL_DIR="$install_dir" \
     CUSTOS_BIN_DIR="$bin_dir" \
-    "$ROOT_DIR/scripts/install.sh" --no-deps >"$TMP_DIR/uninstall-install.out" 2>&1
+    "$ROOT_DIR/scripts/install.sh" >"$TMP_DIR/uninstall-install.out" 2>&1
 
   mkdir -p "$(dirname -- "$config")" "$state_dir"
   printf '{"keep":true}\n' >"$config"
@@ -760,7 +761,7 @@ test_uninstall_can_keep_local_data() {
 
   CUSTOS_INSTALL_DIR="$install_dir" \
     CUSTOS_BIN_DIR="$bin_dir" \
-    "$ROOT_DIR/scripts/install.sh" --no-deps >"$TMP_DIR/uninstall-keep-install.out" 2>&1
+    "$ROOT_DIR/scripts/install.sh" >"$TMP_DIR/uninstall-keep-install.out" 2>&1
 
   mkdir -p "$(dirname -- "$config")" "$state_dir"
   printf '{"keep":true}\n' >"$config"

@@ -65,9 +65,8 @@ For a VM test against a branch or commit:
 curl -fsSL https://raw.githubusercontent.com/inheritweb/custos/main/scripts/install.sh | bash -s -- --ref <branch-or-sha>
 ```
 
-The installer can install dependencies automatically with `pacman`, `apt-get`,
-`dnf`, or `yum` when one of those package managers is available.
-Use `--no-deps` to skip dependency installation.
+The installer only installs the Custos files and command wrapper. Install
+dependencies separately with your distribution's package manager.
 
 Uninstall the local app files, command wrapper, config, and state:
 

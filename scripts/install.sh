@@ -6,7 +6,6 @@ REPO_NAME="${CUSTOS_REPO_NAME:-custos}"
 REPO_REF="${CUSTOS_REF:-main}"
 INSTALL_DIR="${CUSTOS_INSTALL_DIR:-$HOME/.local/share/custos}"
 BIN_DIR="${CUSTOS_BIN_DIR:-$HOME/.local/bin}"
-INSTALL_DEPS=1
 DRY_RUN=0
 
 usage() {
@@ -15,7 +14,6 @@ Usage:
   install.sh [options]
 
 Options:
-  --no-deps             Do not install jq, restic, and rclone
   --dry-run             Print what would happen without changing files
   --ref <ref>           Git ref to install (default: $REPO_REF)
   --install-dir <path>  Install project files here (default: $INSTALL_DIR)
@@ -60,10 +58,6 @@ require_command() {
 parse_args() {
   while (($#)); do
     case "$1" in
-      --no-deps)
-        INSTALL_DEPS=0
-        shift
-        ;;
       --dry-run)
         DRY_RUN=1
         shift
@@ -92,53 +86,6 @@ parse_args() {
         ;;
     esac
   done
-}
-
-install_dependencies() {
-  local -a packages=(jq restic rclone)
-  local -a missing=()
-  local package
-
-  [[ "$INSTALL_DEPS" == "1" ]] || return 0
-
-  for package in "${packages[@]}"; do
-    if ! require_command "$package"; then
-      missing+=("$package")
-    fi
-  done
-
-  ((${#missing[@]} > 0)) || {
-    log "Required packages are already installed."
-    return 0
-  }
-
-  if require_command pacman; then
-    log "Installing packages with pacman: ${missing[*]}"
-    run sudo pacman -S --needed "${missing[@]}"
-    return 0
-  fi
-
-  if require_command apt-get; then
-    log "Installing packages with apt-get: ${missing[*]}"
-    run sudo apt-get update
-    run sudo apt-get install -y "${missing[@]}"
-    return 0
-  fi
-
-  if require_command dnf; then
-    log "Installing packages with dnf: ${missing[*]}"
-    run sudo dnf install -y "${missing[@]}"
-    return 0
-  fi
-
-  if require_command yum; then
-    log "Installing packages with yum: ${missing[*]}"
-    run sudo yum install -y "${missing[@]}"
-    return 0
-  fi
-
-  warn "Missing packages: ${missing[*]}"
-  die "Install them manually, then rerun with --no-deps."
 }
 
 fetch_source() {
@@ -223,7 +170,6 @@ install_from_github() {
 
 main() {
   parse_args "$@"
-  install_dependencies
 
   if ! install_from_checkout; then
     install_from_github
@@ -231,6 +177,7 @@ main() {
 
   install_wrapper
   log "Installed custos."
+  log "Dependencies are not installed by this script; run: custos doctor"
   log "Run: custos doctor"
 }
 
