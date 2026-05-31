@@ -38,6 +38,7 @@ Commands:
   unlock                       Remove stale restic locks
   status                       Show repository and backup status
   tui                          Open the interactive terminal UI
+  uninstall                    Remove the installed command and app files
   remote setup                 Configure the configured remote backend
   remote check                 Check the configured remote backend
   password setup               Create/check an optional stored backup password
@@ -270,6 +271,104 @@ cmd_setup() {
   log_success "Setup complete"
 }
 
+cmd_uninstall() {
+  local yes=0 dry_run=0 purge_local_data=0 force=0
+  local install_bin install_dir wrapper config_dir state_dir
+
+  while (($#)); do
+    case "$1" in
+      --yes|-y)
+        yes=1
+        shift
+        ;;
+      --dry-run)
+        dry_run=1
+        shift
+        ;;
+      --purge-local-data)
+        purge_local_data=1
+        shift
+        ;;
+      --force)
+        force=1
+        shift
+        ;;
+      -h|--help|help)
+        cat <<'USAGE'
+Usage:
+  omarchy-backup uninstall [--yes] [--dry-run] [--purge-local-data] [--force]
+
+Removes the installed omarchy-backup command wrapper and app files.
+Backup repositories, rclone remotes, and local config are left alone by default.
+
+Options:
+  --yes                 Do not ask for confirmation
+  --dry-run             Print what would be removed
+  --purge-local-data    Also remove local config and state directories
+  --force               Allow uninstall even if this looks like a source checkout
+USAGE
+        return 0
+        ;;
+      *)
+        die "Unknown uninstall option: $1"
+        ;;
+    esac
+  done
+
+  install_bin="${OMARCHY_BACKUP_BIN:-$0}"
+  install_dir="$(cd -- "$(dirname -- "$install_bin")/.." && pwd)"
+  wrapper="$(command -v omarchy-backup 2>/dev/null || true)"
+  config_dir="$(dirname -- "$OMARCHY_BACKUP_CONFIG")"
+  state_dir="$OMARCHY_BACKUP_STATE_DIR"
+
+  if [[ "$force" != "1" && ( -d "$install_dir/.git" || -f "$install_dir/scripts/install.sh" ) ]]; then
+    log_error "Refusing to uninstall from a source checkout: $install_dir"
+    log_info "Run this from the installed wrapper, or pass --force if this is intentional."
+    return 1
+  fi
+
+  printf 'This will remove:\n'
+  [[ -n "$wrapper" ]] && printf '  %s\n' "$wrapper"
+  printf '  %s\n' "$install_dir"
+  if [[ "$purge_local_data" == "1" ]]; then
+    printf '  %s\n' "$config_dir"
+    printf '  %s\n' "$state_dir"
+  else
+    printf '\nLocal config and state will be kept:\n'
+    printf '  %s\n' "$config_dir"
+    printf '  %s\n' "$state_dir"
+  fi
+
+  if [[ "$yes" != "1" && "$dry_run" != "1" ]]; then
+    local answer
+    printf '\nContinue with uninstall? [y/N] ' >/dev/tty
+    IFS= read -r answer </dev/tty || return 1
+    [[ "$answer" == "y" || "$answer" == "Y" ]] || {
+      log_info "Uninstall cancelled."
+      return 0
+    }
+  fi
+
+  if [[ "$dry_run" == "1" ]]; then
+    [[ -n "$wrapper" ]] && printf 'dry-run: rm -f %q\n' "$wrapper"
+    printf 'dry-run: rm -rf %q\n' "$install_dir"
+    if [[ "$purge_local_data" == "1" ]]; then
+      printf 'dry-run: rm -rf %q\n' "$config_dir"
+      printf 'dry-run: rm -rf %q\n' "$state_dir"
+    fi
+    return 0
+  fi
+
+  [[ -n "$wrapper" ]] && rm -f -- "$wrapper"
+  rm -rf -- "$install_dir"
+
+  if [[ "$purge_local_data" == "1" ]]; then
+    rm -rf -- "$config_dir" "$state_dir"
+  fi
+
+  log_success "Uninstalled omarchy-backup."
+}
+
 cmd_backup() {
   require_runtime_dependencies
   config_validate
@@ -451,6 +550,7 @@ main() {
     unlock) cmd_unlock "$@" ;;
     status) status_show "$@" ;;
     tui) tui_main "$@" ;;
+    uninstall) cmd_uninstall "$@" ;;
     remote) cmd_remote "$@" ;;
     password) cmd_password "$@" ;;
     paths) cmd_paths "$@" ;;

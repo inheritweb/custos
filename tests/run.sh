@@ -669,6 +669,53 @@ test_installer_installs_local_checkout_wrapper() {
   assert_contains "$TMP_DIR/installed-config.out" '"version": 1'
 }
 
+test_uninstall_removes_installed_files_but_keeps_config() {
+  local install_dir="$TMP_DIR/uninstall-root"
+  local bin_dir="$TMP_DIR/uninstall-bin"
+  local config="$TMP_DIR/uninstall-config/config.json"
+  local state_dir="$TMP_DIR/uninstall-state"
+  local output="$TMP_DIR/uninstall.out"
+
+  OMARCHY_BACKUP_INSTALL_DIR="$install_dir" \
+    OMARCHY_BACKUP_BIN_DIR="$bin_dir" \
+    "$ROOT_DIR/scripts/install.sh" --no-deps >"$TMP_DIR/uninstall-install.out" 2>&1
+
+  mkdir -p "$(dirname -- "$config")" "$state_dir"
+  printf '{"keep":true}\n' >"$config"
+  printf 'state\n' >"$state_dir/keep"
+
+  PATH="$bin_dir:$PATH" \
+    OMARCHY_BACKUP_CONFIG="$config" \
+    OMARCHY_BACKUP_STATE_DIR="$state_dir" \
+    "$bin_dir/omarchy-backup" uninstall --yes >"$output" 2>&1
+
+  if [[ -e "$bin_dir/omarchy-backup" ]]; then
+    printf 'Expected wrapper to be removed\n' >&2
+    return 1
+  fi
+  if [[ -e "$install_dir" ]]; then
+    printf 'Expected install dir to be removed\n' >&2
+    return 1
+  fi
+  if [[ ! -f "$config" || ! -f "$state_dir/keep" ]]; then
+    printf 'Expected config and state to be kept by default\n' >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Uninstalled omarchy-backup"
+}
+
+test_uninstall_refuses_source_checkout() {
+  local output="$TMP_DIR/uninstall-source.out"
+
+  if "$CLI" uninstall --yes >"$output" 2>&1; then
+    printf 'Expected source checkout uninstall to fail\n' >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Refusing to uninstall from a source checkout"
+}
+
 run_test "default config has no stored password command" test_default_config_has_no_password_command
 run_test "default paths are project-neutral" test_default_paths_are_project_neutral
 run_test "password status defaults to interactive" test_password_status_defaults_to_interactive
@@ -696,5 +743,7 @@ run_test "tui retries until session password works" test_tui_retries_until_sessi
 run_test "tui backup shows running state and delta" test_tui_backup_shows_running_state_and_delta
 run_test "tui missing dependencies use omarchy pkg add" test_tui_missing_dependencies_use_omarchy_pkg_add
 run_test "installer installs local checkout wrapper" test_installer_installs_local_checkout_wrapper
+run_test "uninstall removes installed files but keeps config" test_uninstall_removes_installed_files_but_keeps_config
+run_test "uninstall refuses source checkout" test_uninstall_refuses_source_checkout
 
 printf 'ok: %s tests passed\n' "$pass_count"

@@ -53,6 +53,19 @@ The installer uses `omarchy pkg add jq restic rclone` when Omarchy is available.
 Outside Omarchy, it falls back to `sudo pacman -S --needed jq restic rclone`.
 Use `--no-deps` to skip dependency installation.
 
+Uninstall the local app files and command wrapper:
+
+```bash
+omarchy-backup uninstall
+```
+
+This keeps local config, local state, rclone configuration, and remote backup data.
+To remove local config and state as well:
+
+```bash
+omarchy-backup uninstall --purge-local-data
+```
+
 ## Journeys
 
 ### First Backup On This Machine
