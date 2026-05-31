@@ -23,6 +23,36 @@ On Omarchy, install missing packages with:
 omarchy pkg add jq restic rclone
 ```
 
+## Install
+
+Install from GitHub:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/inheritweb/omarchy-backup/main/scripts/install.sh | bash
+```
+
+The installer places project files in:
+
+```txt
+~/.local/share/omarchy-backup
+```
+
+and installs the command wrapper at:
+
+```txt
+~/.local/bin/omarchy-backup
+```
+
+For a VM test against a branch or commit:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/inheritweb/omarchy-backup/main/scripts/install.sh | bash -s -- --ref <branch-or-sha>
+```
+
+The installer uses `omarchy pkg add jq restic rclone` when Omarchy is available.
+Outside Omarchy, it falls back to `sudo pacman -S --needed jq restic rclone`.
+Use `--no-deps` to skip dependency installation.
+
 ## Journeys
 
 ### First Backup On This Machine

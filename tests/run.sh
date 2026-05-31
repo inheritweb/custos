@@ -581,6 +581,27 @@ test_tui_missing_dependencies_use_omarchy_pkg_add() {
   assert_contains "$output" "omarchy pkg add jq"
 }
 
+test_installer_installs_local_checkout_wrapper() {
+  local install_dir="$TMP_DIR/install-root"
+  local bin_dir="$TMP_DIR/install-bin"
+  local output="$TMP_DIR/install.out"
+  local config="$TMP_DIR/installed-config.json"
+
+  OMARCHY_BACKUP_INSTALL_DIR="$install_dir" \
+    OMARCHY_BACKUP_BIN_DIR="$bin_dir" \
+    "$ROOT_DIR/scripts/install.sh" --no-deps >"$output" 2>&1
+
+  if [[ ! -x "$bin_dir/omarchy-backup" ]]; then
+    printf 'Expected installed wrapper at %s\n' "$bin_dir/omarchy-backup" >&2
+    return 1
+  fi
+
+  OMARCHY_BACKUP_CONFIG="$config" "$bin_dir/omarchy-backup" config show >"$TMP_DIR/installed-config.out"
+
+  assert_contains "$output" "Installed omarchy-backup"
+  assert_contains "$TMP_DIR/installed-config.out" '"version": 1'
+}
+
 run_test "default config has no stored password command" test_default_config_has_no_password_command
 run_test "default paths are project-neutral" test_default_paths_are_project_neutral
 run_test "password status defaults to interactive" test_password_status_defaults_to_interactive
@@ -604,5 +625,6 @@ run_test "tui session password bootstraps snapshots" test_tui_session_password_b
 run_test "tui retries until session password works" test_tui_retries_until_session_password_works
 run_test "tui backup shows running state and delta" test_tui_backup_shows_running_state_and_delta
 run_test "tui missing dependencies use omarchy pkg add" test_tui_missing_dependencies_use_omarchy_pkg_add
+run_test "installer installs local checkout wrapper" test_installer_installs_local_checkout_wrapper
 
 printf 'ok: %s tests passed\n' "$pass_count"
