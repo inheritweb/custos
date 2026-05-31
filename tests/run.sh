@@ -73,6 +73,12 @@ case "${1:-}" in
     ;;
   mkdir|lsd)
     ;;
+  lsf)
+    if [[ "${RCLONE_REPOSITORY_CONFIG_MISSING:-0}" == "1" ]]; then
+      exit 0
+    fi
+    printf 'config\n'
+    ;;
   copyto)
     printf 'RCLONE_COPYTO: %q %q\n' "${2:-}" "${3:-}" >>"${RCLONE_LOG:?}"
     if [[ "${2:-}" == *":backups/home/.omarchy-backup/config.json" && -n "${RCLONE_FAKE_DOWNLOAD_CONFIG:-}" ]]; then
@@ -445,7 +451,7 @@ test_tui_missing_repository_does_not_prompt_for_password() {
 
   make_config "$config"
 
-  if ! RESTIC_REPOSITORY_MISSING=1 OMARCHY_BACKUP_TUI_KEYS="q" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! RCLONE_REPOSITORY_CONFIG_MISSING=1 RESTIC_REPOSITORY_MISSING=1 OMARCHY_BACKUP_TUI_KEYS="q" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,260p' "$output" >&2
     return 1
   fi

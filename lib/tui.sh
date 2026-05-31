@@ -497,12 +497,35 @@ tui_probe_remote_state() {
   TUI_STATUS="Google Drive is not connected. Use Connect Google Drive."
 }
 
+tui_repository_config_exists() {
+  local remote_type remote_name remote_path
+
+  tui_config_exists || return 1
+
+  remote_type="$(jq -r '.remote.type // "google-drive"' "$OMARCHY_BACKUP_CONFIG")"
+  if [[ "$remote_type" != "google-drive" ]]; then
+    return 0
+  fi
+
+  remote_name="$(jq -r '.remote.name // "gdrive"' "$OMARCHY_BACKUP_CONFIG" | sed 's/:$//')"
+  remote_path="$(jq -r '.remote.path // "backups/home"' "$OMARCHY_BACKUP_CONFIG")"
+  [[ -n "$remote_name" ]] || remote_name="gdrive"
+
+  rclone lsf "${remote_name}:${remote_path}" --files-only 2>/dev/null | grep -Fxq "config"
+}
+
 tui_probe_repository_state() {
   local error_file
   local -a base_args
 
   tui_config_exists || return 0
   [[ "$TUI_REMOTE_READY" != "0" ]] || return 0
+
+  if ! tui_repository_config_exists; then
+    TUI_REPOSITORY_READY="0"
+    TUI_STATUS="Repository is not initialized. Use Setup repository."
+    return 0
+  fi
 
   mapfile -d '' -t base_args < <(restic_base_args)
   error_file="$(mktemp)"
