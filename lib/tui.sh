@@ -16,6 +16,7 @@ TUI_PASSWORD_VALUE=""
 TUI_SCREEN_ACTIVE=0
 TUI_MODAL_ACTIVE=0
 TUI_STTY_STATE=""
+TUI_CLEANED_UP=0
 TUI_COLOR_RESET=$'\033[0m'
 TUI_COLOR_DIM=$'\033[2m'
 TUI_COLOR_FOCUS=$'\033[33m'
@@ -47,20 +48,27 @@ tui_cli() {
 }
 
 tui_enter_screen() {
+  TUI_CLEANED_UP=0
+
   if [[ -t 1 ]]; then
     printf '\033[?1049h\033[?25l\033[2J\033[H'
     TUI_SCREEN_ACTIVE=1
   fi
 
-  if tty -s; then
+  if [[ -e /dev/tty ]]; then
     TUI_STTY_STATE="$(stty -g </dev/tty 2>/dev/null || true)"
-    stty -echo </dev/tty 2>/dev/null || true
+    if [[ -n "$TUI_STTY_STATE" ]]; then
+      stty -echo </dev/tty 2>/dev/null || true
+    fi
   fi
 }
 
 tui_exit_screen() {
-  if [[ -n "$TUI_STTY_STATE" ]] && tty -s; then
-    stty "$TUI_STTY_STATE" </dev/tty 2>/dev/null || true
+  [[ "$TUI_CLEANED_UP" == "0" ]] || return 0
+  TUI_CLEANED_UP=1
+
+  if [[ -n "$TUI_STTY_STATE" && -e /dev/tty ]]; then
+    stty "$TUI_STTY_STATE" </dev/tty 2>/dev/null || stty sane </dev/tty 2>/dev/null || true
     TUI_STTY_STATE=""
   fi
 
@@ -953,7 +961,8 @@ tui_main() {
 
   tui_require_dependencies
   tui_enter_screen
-  trap 'tui_exit_screen; exit 130' INT TERM
+  trap 'tui_exit_screen' EXIT
+  trap 'tui_exit_screen; trap - EXIT; exit 130' INT TERM
   tui_probe_remote_state
   tui_probe_repository_state
   tui_bootstrap_snapshots || true
@@ -979,7 +988,7 @@ tui_main() {
     fi
   done
 
-  trap - INT TERM
+  trap - INT TERM EXIT
   tui_exit_screen
   return 0
 }
