@@ -678,6 +678,7 @@ test_tui_manage_paths_shows_existing_paths() {
   make_config "$config"
   CUSTOS_CONFIG="$config" "$CLI" paths include add '~/Projects' >/dev/null
   CUSTOS_CONFIG="$config" "$CLI" paths exclude add '**/coverage' >/dev/null
+  CUSTOS_CONFIG="$config" "$CLI" paths exclude add 'zz-visible' >/dev/null
 
   if ! CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS=$'\njj\nq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,420p' "$output" >&2
@@ -688,6 +689,7 @@ test_tui_manage_paths_shows_existing_paths() {
   assert_contains "$output" "Exclude paths"
   assert_contains "$output" "~/Projects"
   assert_contains "$output" "**/coverage"
+  assert_contains "$output" "zz-visible"
   assert_contains "$output" "Add include"
   assert_contains "$output" "Back to snapshots"
 }
@@ -717,7 +719,7 @@ test_tui_manage_paths_removes_selected_exclude() {
 
   make_config "$config"
 
-  if ! CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS=$'\njj\nl\nyq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS=$'\njj\n\t\nyq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,420p' "$output" >&2
     return 1
   fi
@@ -736,7 +738,7 @@ test_tui_manage_paths_adds_include_from_actions() {
 
   make_config "$config"
 
-  if ! CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_INPUT='~/Vault' CUSTOS_TUI_KEYS=$'\njj\n\t\nq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_INPUT='~/Vault' CUSTOS_TUI_KEYS=$'\njj\n\t\t\nq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,420p' "$output" >&2
     return 1
   fi

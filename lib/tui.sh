@@ -29,6 +29,7 @@ TUI_COLOR_BORDER=$'\033[37m'
 TUI_COLOR_HEADER=$'\033[1;38;5;208m'
 TUI_COLOR_SELECTED=$'\033[7m'
 TUI_COLOR_CONTROL=$'\033[38;5;51m'
+TUI_PATH_PANEL_ROWS=9
 
 tui_require_dependencies() {
   local -a missing=()
@@ -485,6 +486,10 @@ tui_path_panel_inner_width() {
   printf '%s' 45
 }
 
+tui_path_panel_page_size() {
+  printf '%s' $((TUI_PATH_PANEL_ROWS * 2))
+}
+
 tui_path_panel_color() {
   local kind="$1"
   if [[ "$TUI_MODAL_ACTIVE" != "1" && "$TUI_FOCUS" == "paths" && "$TUI_PATH_KIND" == "$kind" ]]; then
@@ -511,54 +516,75 @@ tui_path_panel_bottom_segment() {
   printf '%s└%s┘%s' "$color" "$(tui_repeat "─" "$((width - 2))")" "$TUI_COLOR_RESET"
 }
 
-tui_path_cell() {
-  local kind="$1" row="$2" value marker selected
-  local index start count
+tui_path_cell_for_index() {
+  local kind="$1" item_index="$2" value marker selected
+  local index count
 
   count="$(tui_path_count "$kind")"
   index="$(tui_path_index "$kind")"
-  start=0
-  if ((index >= 7)); then
-    start=$((index - 6))
-  fi
 
-  value="$(tui_path_values "$kind" | sed -n "$((start + row + 1))p")"
-  if [[ -z "$value" ]]; then
-    if ((row == 0 && count == 0)); then
-      value="No ${kind} paths"
-    else
-      value=""
-    fi
+  if ((item_index >= count)); then
+    value=""
+  else
+    value="$(tui_path_values "$kind" | sed -n "$((item_index + 1))p")"
   fi
 
   marker=" "
   selected=0
-  if [[ "$TUI_FOCUS" == "paths" && "$kind" == "$TUI_PATH_KIND" && "$((start + row))" == "$index" && "$count" != "0" ]]; then
+  if [[ "$TUI_FOCUS" == "paths" && "$kind" == "$TUI_PATH_KIND" && "$item_index" == "$index" && "$count" != "0" ]]; then
     marker=">"
     selected=1
   fi
 
   TUI_PATH_CELL_SELECTED="$selected"
   TUI_PATH_CELL_MARKER="$marker"
-  TUI_PATH_CELL_VALUE="$(tui_trim "$value" 43)"
+  TUI_PATH_CELL_VALUE="$(tui_trim "$value" 20)"
 }
 
 tui_path_panel_line_segment() {
-  local kind="$1" row="$2" selected marker value content width color
-  width="$(tui_path_panel_inner_width)"
+  local kind="$1" row="$2" count index page_size start left_index right_index color
+  local left_selected left_marker left_value right_selected right_marker right_value left_content right_content
   color="$(tui_path_panel_color "$kind")"
+  count="$(tui_path_count "$kind")"
+  index="$(tui_path_index "$kind")"
+  page_size="$(tui_path_panel_page_size)"
+  start=$(((index / page_size) * page_size))
 
-  tui_path_cell "$kind" "$row"
-  selected="$TUI_PATH_CELL_SELECTED"
-  marker="$TUI_PATH_CELL_MARKER"
-  value="$TUI_PATH_CELL_VALUE"
-  content="$(printf '%s %-43s' "$marker" "$value")"
+  left_index=$((start + row))
+  right_index=$((start + TUI_PATH_PANEL_ROWS + row))
+
+  if ((row == 0 && count == 0)); then
+    left_selected=0
+    left_marker=" "
+    left_value="No ${kind} paths"
+    right_selected=0
+    right_marker=" "
+    right_value=""
+  else
+    tui_path_cell_for_index "$kind" "$left_index"
+    left_selected="$TUI_PATH_CELL_SELECTED"
+    left_marker="$TUI_PATH_CELL_MARKER"
+    left_value="$TUI_PATH_CELL_VALUE"
+    tui_path_cell_for_index "$kind" "$right_index"
+    right_selected="$TUI_PATH_CELL_SELECTED"
+    right_marker="$TUI_PATH_CELL_MARKER"
+    right_value="$TUI_PATH_CELL_VALUE"
+  fi
+
+  left_content="$(printf '%s %-20s' "$left_marker" "$left_value")"
+  right_content="$(printf '%s %-20s' "$right_marker" "$right_value")"
 
   printf '%s│%s ' "$color" "$TUI_COLOR_RESET"
-  if [[ "$selected" == "1" ]]; then
-    printf '%s%-*s%s' "$TUI_COLOR_SELECTED" "$width" "$content" "$TUI_COLOR_RESET"
+  if [[ "$left_selected" == "1" ]]; then
+    printf '%s%-22s%s' "$TUI_COLOR_SELECTED" "$left_content" "$TUI_COLOR_RESET"
   else
-    printf '%-*s' "$width" "$content"
+    printf '%-22s' "$left_content"
+  fi
+  printf ' '
+  if [[ "$right_selected" == "1" ]]; then
+    printf '%s%-22s%s' "$TUI_COLOR_SELECTED" "$right_content" "$TUI_COLOR_RESET"
+  else
+    printf '%-22s' "$right_content"
   fi
   printf ' %s│%s' "$color" "$TUI_COLOR_RESET"
 }
@@ -575,7 +601,7 @@ tui_render_paths() {
   tui_path_panel_top_segment "Exclude paths" exclude
   printf '\n'
 
-  for ((row = 0; row < 8; row++)); do
+  for ((row = 0; row < TUI_PATH_PANEL_ROWS; row++)); do
     tui_clear_line
     tui_path_panel_line_segment include "$row"
     printf '  '
@@ -1266,9 +1292,24 @@ tui_move_path_column() {
 tui_next_focus() {
   if [[ "$TUI_MODE" == "paths" ]]; then
     case "$TUI_FOCUS" in
-      paths) TUI_FOCUS="actions" ;;
-      actions) TUI_FOCUS="paths" ;;
-      *) TUI_FOCUS="paths" ;;
+      paths)
+        if [[ "$TUI_PATH_KIND" == "include" ]]; then
+          TUI_PATH_KIND="exclude"
+          tui_clamp_path_index "$TUI_PATH_KIND"
+        else
+          TUI_FOCUS="actions"
+        fi
+        ;;
+      actions)
+        TUI_FOCUS="paths"
+        TUI_PATH_KIND="include"
+        tui_clamp_path_index "$TUI_PATH_KIND"
+        ;;
+      *)
+        TUI_FOCUS="paths"
+        TUI_PATH_KIND="include"
+        tui_clamp_path_index "$TUI_PATH_KIND"
+        ;;
     esac
     return 0
   fi
