@@ -454,13 +454,15 @@ tui_render_status() {
 
 tui_render_title() {
   tui_clear_line
-  printf '%s%s   ___         _            %s\n' "$TUI_COLOR_ITALIC" "$TUI_COLOR_FOCUS" "$TUI_COLOR_RESET"
+  printf '%s%s   ______           __             %s\n' "$TUI_COLOR_ITALIC" "$TUI_COLOR_FOCUS" "$TUI_COLOR_RESET"
   tui_clear_line
-  printf '%s%s  / __|  _  __| |_ ___  ___ %s\n' "$TUI_COLOR_ITALIC" "$TUI_COLOR_FOCUS" "$TUI_COLOR_RESET"
+  printf '%s%s  / ____/_  _______/ /_____  _____%s\n' "$TUI_COLOR_ITALIC" "$TUI_COLOR_FOCUS" "$TUI_COLOR_RESET"
   tui_clear_line
-  printf '%s%s | (__| | |(_-<  _/ _ \\/(_-< %s\n' "$TUI_COLOR_ITALIC" "$TUI_COLOR_FOCUS" "$TUI_COLOR_RESET"
+  printf '%s%s / /   / / / / ___/ __/ __ \\/ ___/%s\n' "$TUI_COLOR_ITALIC" "$TUI_COLOR_FOCUS" "$TUI_COLOR_RESET"
   tui_clear_line
-  printf '%s%s  \\___|\\_,_/__/\\__\\___//__/ %s\n' "$TUI_COLOR_ITALIC" "$TUI_COLOR_FOCUS" "$TUI_COLOR_RESET"
+  printf '%s%s/ /___/ /_/ (__  ) /_/ /_/ (__  ) %s\n' "$TUI_COLOR_ITALIC" "$TUI_COLOR_FOCUS" "$TUI_COLOR_RESET"
+  tui_clear_line
+  printf '%s%s\\____/\\__,_/____/\\__/\\____/____/  %s\n' "$TUI_COLOR_ITALIC" "$TUI_COLOR_FOCUS" "$TUI_COLOR_RESET"
 }
 
 tui_render() {
