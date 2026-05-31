@@ -532,9 +532,6 @@ tui_repository_config_exists() {
 }
 
 tui_probe_repository_state() {
-  local error_file
-  local -a base_args
-
   tui_config_exists || return 0
   [[ "$TUI_REMOTE_READY" != "0" ]] || return 0
 
@@ -544,31 +541,8 @@ tui_probe_repository_state() {
     return 0
   fi
 
-  remote_load
-  mapfile -d '' -t base_args < <(restic_base_args)
-  error_file="$(mktemp)"
-
-  if (
-    export RESTIC_PASSWORD="omarchy-backup-probe"
-    unset RESTIC_PASSWORD_COMMAND
-    restic "${base_args[@]}" snapshots --json >/dev/null 2>"$error_file"
-  ); then
-    TUI_REPOSITORY_READY="1"
-    rm -f "$error_file"
-    return 0
-  fi
-
-  if grep -Eiq 'repository does not exist|unable to open config file|Is there a repository' "$error_file"; then
-    TUI_REPOSITORY_READY="0"
-    TUI_STATUS="Repository is not initialized. Use Setup repository."
-    TUI_LOG="$(cat "$error_file")"
-    rm -f "$error_file"
-    return 0
-  fi
-
   TUI_REPOSITORY_READY="1"
   TUI_STATUS="Repository is configured. Use Connect repository."
-  rm -f "$error_file"
 }
 
 tui_prompt_session_password() {
@@ -1023,7 +997,20 @@ tui_main() {
   tui_enter_screen
   trap 'tui_exit_screen' EXIT
   trap 'tui_exit_screen; trap - EXIT; exit 130' INT TERM
+
+  TUI_STATUS="Starting omarchy-backup..."
+  tui_render
+
+  if tui_config_exists; then
+    TUI_STATUS="Checking Google Drive connection..."
+    tui_render
+  fi
   tui_probe_remote_state
+
+  if tui_config_exists && [[ "$TUI_REMOTE_READY" != "0" ]]; then
+    TUI_STATUS="Checking repository setup..."
+    tui_render
+  fi
   tui_probe_repository_state
 
   while true; do
