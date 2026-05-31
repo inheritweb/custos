@@ -19,6 +19,7 @@ TUI_STTY_STATE=""
 TUI_CLEANED_UP=0
 TUI_COLOR_RESET=$'\033[0m'
 TUI_COLOR_DIM=$'\033[2m'
+TUI_COLOR_ITALIC=$'\033[3m'
 TUI_COLOR_FOCUS=$'\033[38;5;154m'
 TUI_COLOR_BORDER=$'\033[37m'
 TUI_COLOR_HEADER=$'\033[1;38;5;208m'
@@ -451,8 +452,22 @@ tui_render_status() {
     "$TUI_COLOR_CONTROL" "$TUI_COLOR_RESET" "$TUI_COLOR_RESET"
 }
 
+tui_render_title() {
+  tui_clear_line
+  printf '%s%s   ___         _            %s\n' "$TUI_COLOR_ITALIC" "$TUI_COLOR_FOCUS" "$TUI_COLOR_RESET"
+  tui_clear_line
+  printf '%s%s  / __|  _  __| |_ ___  ___ %s\n' "$TUI_COLOR_ITALIC" "$TUI_COLOR_FOCUS" "$TUI_COLOR_RESET"
+  tui_clear_line
+  printf '%s%s | (__| | |(_-<  _/ _ \\/(_-< %s\n' "$TUI_COLOR_ITALIC" "$TUI_COLOR_FOCUS" "$TUI_COLOR_RESET"
+  tui_clear_line
+  printf '%s%s  \\___|\\_,_/__/\\__\\___//__/ %s\n' "$TUI_COLOR_ITALIC" "$TUI_COLOR_FOCUS" "$TUI_COLOR_RESET"
+}
+
 tui_render() {
   tui_clear
+  tui_render_title
+  tui_clear_line
+  printf '\n'
   tui_render_config
   tui_clear_line
   printf '\n'

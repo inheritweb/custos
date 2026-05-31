@@ -422,6 +422,7 @@ test_tui_first_run_exit_starts_cleanly() {
   assert_contains "$output" "Snapshots"
   assert_contains "$output" "Actions"
   assert_contains "$output" "Connect Google Drive"
+  assert_contains "$output" $'\033[3m'
 }
 
 test_tui_configured_exit_starts_cleanly() {
