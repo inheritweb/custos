@@ -572,7 +572,7 @@ test_tui_snapshot_rows_are_readable_and_selectable() {
   assert_contains "$output" "2026-05-30 10:58:39 +01:00"
   assert_contains "$output" "Restore selected snapshot"
   assert_contains "$output" "Browse selected snapshot"
-  assert_not_contains "$output" $'\033[38;5;208m'
+  assert_not_contains "$output" $'\033[1;38;5;208m'
 }
 
 test_tui_snapshot_header_is_orange_when_focused() {
@@ -595,7 +595,8 @@ test_tui_snapshot_header_is_orange_when_focused() {
     return 1
   fi
 
-  assert_contains "$output" $'\033[38;5;208m'
+  assert_contains "$output" $'\033[1;38;5;208m'
+  assert_contains "$output" $'\033[38;5;154m'
 }
 
 test_tui_session_password_bootstraps_snapshots() {
