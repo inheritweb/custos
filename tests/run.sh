@@ -531,6 +531,22 @@ test_tui_refresh_snapshots_ignores_status_stderr() {
   assert_not_contains "$output" "jq: parse error"
 }
 
+test_tui_restore_config_shows_loading_state() {
+  local source_config="$TMP_DIR/tui-restore-source.json"
+  local target_config="$TMP_DIR/tui-restore-target.json"
+  local output="$TMP_DIR/tui-restore-config.out"
+
+  make_config "$source_config"
+
+  if ! RCLONE_FAKE_DOWNLOAD_CONFIG="$source_config" OMARCHY_BACKUP_TUI_KEYS=$'j\nyq' OMARCHY_BACKUP_CONFIG="$target_config" "$CLI" tui >"$output" 2>&1; then
+    sed -n '1,300p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Restoring config from remote"
+  assert_contains "$output" "Config restored"
+}
+
 test_tui_snapshot_rows_are_readable_and_selectable() {
   local config="$TMP_DIR/tui-snapshot-rows.json"
   local output="$TMP_DIR/tui-snapshot-rows.out"
@@ -556,6 +572,30 @@ test_tui_snapshot_rows_are_readable_and_selectable() {
   assert_contains "$output" "2026-05-30 10:58:39 +01:00"
   assert_contains "$output" "Restore selected snapshot"
   assert_contains "$output" "Browse selected snapshot"
+  assert_not_contains "$output" $'\033[38;5;208m'
+}
+
+test_tui_snapshot_header_is_orange_when_focused() {
+  local config="$TMP_DIR/tui-snapshot-focused.json"
+  local output="$TMP_DIR/tui-snapshot-focused.out"
+  local snapshots
+
+  make_config "$config"
+  snapshots='[
+    {
+      "short_id": "fedcba98",
+      "time": "2026-05-30T10:58:39+01:00",
+      "hostname": "omarchy-test-host",
+      "paths": ["/home/test/Documents"]
+    }
+  ]'
+
+  if ! RESTIC_SNAPSHOTS_JSON="$snapshots" OMARCHY_BACKUP_TUI_PASSWORD="test-password" OMARCHY_BACKUP_TUI_KEYS=$'\n\tq' OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+    sed -n '1,300p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" $'\033[38;5;208m'
 }
 
 test_tui_session_password_bootstraps_snapshots() {
@@ -766,7 +806,9 @@ run_test "tui missing remote does not prompt for password" test_tui_missing_remo
 run_test "tui setup repository confirms and reuses password" test_tui_setup_repository_confirms_and_reuses_password
 run_test "tui down navigation does not exit" test_tui_down_navigation_does_not_exit
 run_test "tui refresh snapshots ignores status stderr" test_tui_refresh_snapshots_ignores_status_stderr
+run_test "tui restore config shows loading state" test_tui_restore_config_shows_loading_state
 run_test "tui snapshot rows are readable and selectable" test_tui_snapshot_rows_are_readable_and_selectable
+run_test "tui snapshot header is orange when focused" test_tui_snapshot_header_is_orange_when_focused
 run_test "tui session password bootstraps snapshots" test_tui_session_password_bootstraps_snapshots
 run_test "tui retries until session password works" test_tui_retries_until_session_password_works
 run_test "tui backup shows running state and delta" test_tui_backup_shows_running_state_and_delta

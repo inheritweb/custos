@@ -23,7 +23,7 @@ TUI_COLOR_FOCUS=$'\033[33m'
 TUI_COLOR_BORDER=$'\033[37m'
 TUI_COLOR_HEADER=$'\033[38;5;208m'
 TUI_COLOR_SELECTED=$'\033[7m'
-TUI_COLOR_CONTROL=$'\033[36m'
+TUI_COLOR_CONTROL=$'\033[38;5;51m'
 
 tui_require_dependencies() {
   local -a missing=()
@@ -55,7 +55,7 @@ tui_enter_screen() {
     TUI_SCREEN_ACTIVE=1
   fi
 
-  if TUI_STTY_STATE="$(stty -g </dev/tty 2>/dev/null)"; then
+  if TUI_STTY_STATE="$({ stty -g </dev/tty; } 2>/dev/null)"; then
     stty -echo </dev/tty 2>/dev/null || true
   else
     TUI_STTY_STATE=""
@@ -395,7 +395,7 @@ tui_render_snapshots() {
   [[ "$TUI_MODAL_ACTIVE" != "1" && "$TUI_FOCUS" == "snapshots" ]] && focused=1
   tui_box_top "Snapshots" "$focused"
   while IFS= read -r line; do
-    if [[ "$TUI_SNAPSHOTS_LOADED" == "1" && -n "$TUI_SNAPSHOTS_TSV" && "$count" == "0" ]]; then
+    if [[ "$focused" == "1" && "$TUI_SNAPSHOTS_LOADED" == "1" && -n "$TUI_SNAPSHOTS_TSV" && "$count" == "0" ]]; then
       tui_box_colored_line "$line" "$focused" "$TUI_COLOR_HEADER"
     elif [[ "$TUI_MODAL_ACTIVE" != "1" && "$TUI_FOCUS" == "snapshots" && "$line" == "> "* ]]; then
       tui_box_colored_line "$line" "$focused" "$TUI_COLOR_SELECTED"
@@ -930,8 +930,17 @@ tui_activate_action() {
       ;;
     "Connect repository") tui_bootstrap_snapshots ;;
     "Restore config from remote")
-      tui_confirm "Restore config from remote? This can overwrite local config." &&
-        tui_capture tui_cli config restore --yes && TUI_STATUS="Config restored" || TUI_STATUS="Config restore cancelled or failed"
+      if tui_confirm "Restore config from remote? This can overwrite local config."; then
+        if tui_capture_with_loading "Restoring config from remote" tui_cli config restore --yes; then
+          tui_probe_remote_state
+          tui_probe_repository_state
+          TUI_STATUS="Config restored"
+        else
+          TUI_STATUS="Config restore failed"
+        fi
+      else
+        TUI_STATUS="Config restore cancelled"
+      fi
       ;;
     "Create new config")
       tui_capture tui_cli config show && TUI_STATUS="Config created" || TUI_STATUS="Config creation failed"
