@@ -440,8 +440,9 @@ test_tui_configured_exit_starts_cleanly() {
   assert_contains "$output" "Snapshots"
   assert_contains "$output" "Actions"
   assert_contains "$output" "Remote"
-  assert_contains "$output" "Snapshots loaded"
-  assert_contains "$output" "Loading snapshots"
+  assert_contains "$output" "Connect repository"
+  assert_not_contains "$output" "Repository Password"
+  assert_not_contains "$output" "Snapshots loaded"
   assert_not_contains "$output" "Browse selected snapshot"
 }
 
@@ -510,7 +511,7 @@ test_tui_down_navigation_does_not_exit() {
     return 1
   fi
 
-  assert_contains "$output" "Refresh snapshots"
+  assert_contains "$output" "Connect repository"
   assert_not_contains "$output" "Repository operation failed"
 }
 
@@ -572,7 +573,7 @@ test_tui_session_password_bootstraps_snapshots() {
     }
   ]'
 
-  if ! RESTIC_SNAPSHOTS_JSON="$snapshots" OMARCHY_BACKUP_TUI_PASSWORD="test-password" OMARCHY_BACKUP_TUI_KEYS="q" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! RESTIC_SNAPSHOTS_JSON="$snapshots" OMARCHY_BACKUP_TUI_PASSWORD="test-password" OMARCHY_BACKUP_TUI_KEYS=$'\nq' OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,300p' "$output" >&2
     return 1
   fi
@@ -597,7 +598,7 @@ test_tui_retries_until_session_password_works() {
     }
   ]'
 
-  if ! EXPECT_RESTIC_PASSWORD="right-password" RESTIC_SNAPSHOTS_JSON="$snapshots" OMARCHY_BACKUP_TUI_PASSWORD=$'wrong-password\nright-password' OMARCHY_BACKUP_TUI_KEYS="q" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! EXPECT_RESTIC_PASSWORD="right-password" RESTIC_SNAPSHOTS_JSON="$snapshots" OMARCHY_BACKUP_TUI_PASSWORD=$'wrong-password\nright-password' OMARCHY_BACKUP_TUI_KEYS=$'\nq' OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,360p' "$output" >&2
     return 1
   fi
@@ -614,7 +615,7 @@ test_tui_backup_shows_running_state_and_delta() {
 
   make_config "$config"
 
-  if ! OMARCHY_BACKUP_TUI_PASSWORD="test-password" OMARCHY_BACKUP_TUI_KEYS=$'\nyyq' OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! OMARCHY_BACKUP_TUI_PASSWORD="test-password" OMARCHY_BACKUP_TUI_KEYS=$'\n\nyyq' OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,420p' "$output" >&2
     return 1
   fi

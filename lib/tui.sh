@@ -306,6 +306,16 @@ ACTIONS
     return 0
   fi
 
+  if [[ "$TUI_SNAPSHOTS_LOADED" != "1" ]]; then
+    cat <<'ACTIONS'
+Connect repository
+Restore config from remote
+Doctor
+Quit
+ACTIONS
+    return 0
+  fi
+
   printf '%s\n' "Backup now"
   if tui_has_selected_snapshot; then
     printf '%s\n' "Restore selected snapshot"
@@ -557,6 +567,7 @@ tui_probe_repository_state() {
   fi
 
   TUI_REPOSITORY_READY="1"
+  TUI_STATUS="Repository is configured. Use Connect repository."
   rm -f "$error_file"
 }
 
@@ -935,15 +946,15 @@ tui_activate_action() {
 
   case "$action" in
     "Connect Google Drive")
-      if tui_capture tui_cli remote setup; then
+      if tui_capture_with_loading "Connecting Google Drive" tui_cli remote setup; then
         TUI_REMOTE_READY="1"
         TUI_STATUS="Google Drive connected"
         tui_probe_repository_state
-        tui_bootstrap_snapshots || true
       else
         TUI_STATUS="Remote setup failed"
       fi
       ;;
+    "Connect repository") tui_bootstrap_snapshots ;;
     "Restore config from remote")
       tui_confirm "Restore config from remote? This can overwrite local config." &&
         tui_capture tui_cli config restore --yes && TUI_STATUS="Config restored" || TUI_STATUS="Config restore cancelled or failed"
@@ -1014,7 +1025,6 @@ tui_main() {
   trap 'tui_exit_screen; trap - EXIT; exit 130' INT TERM
   tui_probe_remote_state
   tui_probe_repository_state
-  tui_bootstrap_snapshots || true
 
   while true; do
     tui_load_actions
