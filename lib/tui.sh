@@ -477,6 +477,40 @@ tui_render_snapshots() {
   tui_box_bottom "$focused"
 }
 
+tui_path_panel_width() {
+  printf '%s' 49
+}
+
+tui_path_panel_inner_width() {
+  printf '%s' 45
+}
+
+tui_path_panel_color() {
+  local kind="$1"
+  if [[ "$TUI_MODAL_ACTIVE" != "1" && "$TUI_FOCUS" == "paths" && "$TUI_PATH_KIND" == "$kind" ]]; then
+    printf '%s' "$TUI_COLOR_FOCUS"
+  else
+    printf '%s' "$TUI_COLOR_BORDER"
+  fi
+}
+
+tui_path_panel_top_segment() {
+  local title="$1" kind="$2"
+  local width title_text fill color
+  width="$(tui_path_panel_width)"
+  title_text=" $title "
+  fill=$((width - ${#title_text} - 2))
+  color="$(tui_path_panel_color "$kind")"
+  printf '%s┌%s%s┐%s' "$color" "$title_text" "$(tui_repeat "─" "$fill")" "$TUI_COLOR_RESET"
+}
+
+tui_path_panel_bottom_segment() {
+  local kind="$1" width color
+  width="$(tui_path_panel_width)"
+  color="$(tui_path_panel_color "$kind")"
+  printf '%s└%s┘%s' "$color" "$(tui_repeat "─" "$((width - 2))")" "$TUI_COLOR_RESET"
+}
+
 tui_path_cell() {
   local kind="$1" row="$2" value marker selected
   local index start count
@@ -499,56 +533,61 @@ tui_path_cell() {
 
   marker=" "
   selected=0
-  if [[ "$kind" == "$TUI_PATH_KIND" && "$((start + row))" == "$index" && "$count" != "0" ]]; then
+  if [[ "$TUI_FOCUS" == "paths" && "$kind" == "$TUI_PATH_KIND" && "$((start + row))" == "$index" && "$count" != "0" ]]; then
     marker=">"
     selected=1
   fi
 
   TUI_PATH_CELL_SELECTED="$selected"
   TUI_PATH_CELL_MARKER="$marker"
-  TUI_PATH_CELL_VALUE="$(tui_trim "$value" 42)"
+  TUI_PATH_CELL_VALUE="$(tui_trim "$value" 43)"
+}
+
+tui_path_panel_line_segment() {
+  local kind="$1" row="$2" selected marker value content width color
+  width="$(tui_path_panel_inner_width)"
+  color="$(tui_path_panel_color "$kind")"
+
+  tui_path_cell "$kind" "$row"
+  selected="$TUI_PATH_CELL_SELECTED"
+  marker="$TUI_PATH_CELL_MARKER"
+  value="$TUI_PATH_CELL_VALUE"
+  content="$(printf '%s %-43s' "$marker" "$value")"
+
+  printf '%s│%s ' "$color" "$TUI_COLOR_RESET"
+  if [[ "$selected" == "1" ]]; then
+    printf '%s%-*s%s' "$TUI_COLOR_SELECTED" "$width" "$content" "$TUI_COLOR_RESET"
+  else
+    printf '%-*s' "$width" "$content"
+  fi
+  printf ' %s│%s' "$color" "$TUI_COLOR_RESET"
 }
 
 tui_render_paths() {
-  local focused=0 count=0 row include_cell exclude_cell
-  local include_selected include_marker include_value exclude_selected exclude_marker exclude_value
-  [[ "$TUI_MODAL_ACTIVE" != "1" && "$TUI_FOCUS" == "paths" ]] && focused=1
+  local row
 
   tui_clamp_path_index include
   tui_clamp_path_index exclude
 
-  tui_box_top "Paths" "$focused"
+  tui_clear_line
+  tui_path_panel_top_segment "Include paths" include
+  printf '  '
+  tui_path_panel_top_segment "Exclude paths" exclude
+  printf '\n'
 
-  local header
-  header="$(printf '  %-45s  %-45s' "Includes" "Excludes")"
-  if [[ "$focused" == "1" ]]; then
-    tui_box_colored_line "$header" "$focused" "$TUI_COLOR_HEADER"
-  else
-    tui_box_line "$header" "$focused"
-  fi
-  count=$((count + 1))
-
-  for ((row = 0; row < 7; row++)); do
-    tui_path_cell include "$row"
-    include_selected="$TUI_PATH_CELL_SELECTED"
-    include_marker="$TUI_PATH_CELL_MARKER"
-    include_value="$TUI_PATH_CELL_VALUE"
-    tui_path_cell exclude "$row"
-    exclude_selected="$TUI_PATH_CELL_SELECTED"
-    exclude_marker="$TUI_PATH_CELL_MARKER"
-    exclude_value="$TUI_PATH_CELL_VALUE"
-
-    local line
-    line="$(printf '%s %-43s  %s %-43s' "$include_marker" "$include_value" "$exclude_marker" "$exclude_value")"
-    if [[ "$focused" == "1" && ( "$include_selected" == "1" || "$exclude_selected" == "1" ) ]]; then
-      tui_box_colored_line "$line" "$focused" "$TUI_COLOR_SELECTED"
-    else
-      tui_box_line "$line" "$focused"
-    fi
-    count=$((count + 1))
+  for ((row = 0; row < 8; row++)); do
+    tui_clear_line
+    tui_path_panel_line_segment include "$row"
+    printf '  '
+    tui_path_panel_line_segment exclude "$row"
+    printf '\n'
   done
 
-  tui_box_bottom "$focused"
+  tui_clear_line
+  tui_path_panel_bottom_segment include
+  printf '  '
+  tui_path_panel_bottom_segment exclude
+  printf '\n'
 }
 
 tui_render_middle_pane() {
