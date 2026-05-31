@@ -80,6 +80,28 @@ This keeps rclone configuration and remote backup data. To leave local config an
 custos uninstall --keep-local-data
 ```
 
+## Interactive TUI
+
+Launch the interactive terminal UI:
+
+```bash
+custos tui
+```
+
+![Custos TUI screenshot](assets/screenshot.png)
+
+The TUI is a shell frontend over the same commands documented below. It uses a
+static dashboard layout: config, snapshots, and actions stay visible while focus
+moves between the snapshots and actions panes with Tab.
+
+On first run, the actions pane lets you connect Google Drive, restore an existing
+config, or create a new config. Once configured, snapshots stay visible alongside
+backup, restore, path, repository, and maintenance actions.
+
+If no stored password command is available, the TUI asks for the repository
+password once at session start and reuses it for repository actions. Passwords
+are passed through the process environment, not as command-line arguments.
+
 ## Journeys
 
 ### First Backup On This Machine
@@ -101,62 +123,42 @@ sudo dnf install jq restic rclone
 Check the local environment:
 
 ```bash
-./bin/custos doctor
+custos doctor
 ```
 
 Create or inspect the config:
 
 ```bash
-./bin/custos config show
-./bin/custos paths list
+custos config show
+custos paths list
 ```
 
 Set up Google Drive and initialize the Restic repository:
 
 ```bash
-./bin/custos setup
+custos setup
 ```
 
 Preview and run the first backup:
 
 ```bash
-./bin/custos backup --dry-run
-./bin/custos backup
+custos backup --dry-run
+custos backup
 ```
 
 Verify it:
 
 ```bash
-./bin/custos snapshots
-./bin/custos check
+custos snapshots
+custos check
 ```
-
-### Interactive TUI
-
-Launch the interactive terminal UI:
-
-```bash
-./bin/custos tui
-```
-
-The TUI is a shell frontend over the same commands documented below. It uses a
-static dashboard layout: config, snapshots, and actions stay visible while focus
-moves between the snapshots and actions panes with Tab.
-
-On first run, the actions pane lets you connect Google Drive, restore an existing
-config, or create a new config. Once configured, snapshots stay visible alongside
-backup, restore, path, repository, and maintenance actions.
-
-If no stored password command is available, the TUI asks for the repository
-password once at session start and reuses it for repository actions. Passwords
-are passed through the process environment, not as command-line arguments.
 
 ### Restore A File Safely
 
 By default, restore goes to a staging directory so local files are not overwritten:
 
 ```bash
-./bin/custos restore latest ~/Documents/file.pdf
+custos restore latest ~/Documents/file.pdf
 ```
 
 The default target is:
@@ -168,7 +170,7 @@ The default target is:
 Restore to the original location only when that is intentional:
 
 ```bash
-./bin/custos restore latest ~/Documents/file.pdf --original
+custos restore latest ~/Documents/file.pdf --original
 ```
 
 ### Fresh Linux Restore
@@ -186,20 +188,20 @@ sudo apt-get install jq restic rclone
 # Fedora / RHEL family
 sudo dnf install jq restic rclone
 
-./bin/custos remote setup
+custos remote setup
 ```
 
 Restore the saved `custos` config from the remote:
 
 ```bash
-./bin/custos config restore
+custos config restore
 ```
 
 Then inspect snapshots and restore to a staging directory:
 
 ```bash
-./bin/custos snapshots
-./bin/custos restore latest --target ~/Restored/custos/latest
+custos snapshots
+custos restore latest --target ~/Restored/custos/latest
 ```
 
 Use `--original` only when you want Restic to write back to the original paths.
@@ -209,27 +211,27 @@ Use `--original` only when you want Restic to write back to the original paths.
 List the active include and exclude rules:
 
 ```bash
-./bin/custos paths list
+custos paths list
 ```
 
 Add or remove protected paths:
 
 ```bash
-./bin/custos paths include add ~/Projects
-./bin/custos paths include remove ~/Projects
+custos paths include add ~/Projects
+custos paths include remove ~/Projects
 ```
 
 Add or remove exclude patterns:
 
 ```bash
-./bin/custos paths exclude add '**/*.qcow2'
-./bin/custos paths exclude remove '**/*.qcow2'
+custos paths exclude add '**/*.qcow2'
+custos paths exclude remove '**/*.qcow2'
 ```
 
 Preview before running the next backup:
 
 ```bash
-./bin/custos backup --dry-run
+custos backup --dry-run
 ```
 
 ### Interrupted Or Failed Backup
@@ -240,13 +242,13 @@ uploaded chunks, but incomplete snapshots are not useful restore points.
 After fixing includes/excludes, rerun:
 
 ```bash
-./bin/custos backup
+custos backup
 ```
 
 Once you have a successful snapshot, reclaim unreferenced repository data:
 
 ```bash
-./bin/custos prune
+custos prune
 ```
 
 ## Quick Start
@@ -254,9 +256,9 @@ Once you have a successful snapshot, reclaim unreferenced repository data:
 Run the CLI from the repository:
 
 ```bash
-./bin/custos doctor
-./bin/custos config show
-./bin/custos config validate
+custos doctor
+custos config show
+custos config validate
 ```
 
 The first config command creates:
@@ -268,7 +270,7 @@ The first config command creates:
 Set up Google Drive storage and initialize the restic repository:
 
 ```bash
-./bin/custos setup
+custos setup
 ```
 
 Password handling follows this order:
@@ -283,25 +285,25 @@ through shell history or process listings.
 Create a backup:
 
 ```bash
-./bin/custos backup
+custos backup
 ```
 
 List snapshots:
 
 ```bash
-./bin/custos snapshots
+custos snapshots
 ```
 
 Restore a snapshot to a staging directory:
 
 ```bash
-./bin/custos restore latest --target ~/Restored/custos/latest
+custos restore latest --target ~/Restored/custos/latest
 ```
 
 Restore a selected path from a snapshot:
 
 ```bash
-./bin/custos restore latest ~/Documents --target ~/Restored/custos/latest
+custos restore latest ~/Documents --target ~/Restored/custos/latest
 ```
 
 ## Commands
@@ -368,7 +370,7 @@ removed from that remote copy.
 On a fresh Linux install, restore that config before normal setup:
 
 ```bash
-./bin/custos config restore
+custos config restore
 ```
 
 By default this looks at:
@@ -380,17 +382,17 @@ rclone:gdrive:backups/home
 You can override it:
 
 ```bash
-./bin/custos config restore --repository rclone:gdrive:backups/laptop
+custos config restore --repository rclone:gdrive:backups/laptop
 ```
 
 Customize protected paths through the CLI:
 
 ```bash
-./bin/custos paths list
-./bin/custos paths include add ~/Projects
-./bin/custos paths exclude add '**/coverage'
-./bin/custos paths include remove ~/Projects
-./bin/custos paths exclude remove '**/coverage'
+custos paths list
+custos paths include add ~/Projects
+custos paths exclude add '**/coverage'
+custos paths include remove ~/Projects
+custos paths exclude remove '**/coverage'
 ```
 
 ## Safety
