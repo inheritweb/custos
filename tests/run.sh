@@ -669,7 +669,7 @@ test_installer_installs_local_checkout_wrapper() {
   assert_contains "$TMP_DIR/installed-config.out" '"version": 1'
 }
 
-test_uninstall_removes_installed_files_but_keeps_config() {
+test_uninstall_removes_installed_files_config_and_state() {
   local install_dir="$TMP_DIR/uninstall-root"
   local bin_dir="$TMP_DIR/uninstall-bin"
   local config="$TMP_DIR/uninstall-config/config.json"
@@ -697,12 +697,40 @@ test_uninstall_removes_installed_files_but_keeps_config() {
     printf 'Expected install dir to be removed\n' >&2
     return 1
   fi
-  if [[ ! -f "$config" || ! -f "$state_dir/keep" ]]; then
-    printf 'Expected config and state to be kept by default\n' >&2
+  if [[ -e "$config" || -e "$state_dir" ]]; then
+    printf 'Expected config and state to be removed by default\n' >&2
     return 1
   fi
 
   assert_contains "$output" "Uninstalled omarchy-backup"
+}
+
+test_uninstall_can_keep_local_data() {
+  local install_dir="$TMP_DIR/uninstall-keep-root"
+  local bin_dir="$TMP_DIR/uninstall-keep-bin"
+  local config="$TMP_DIR/uninstall-keep-config/config.json"
+  local state_dir="$TMP_DIR/uninstall-keep-state"
+  local output="$TMP_DIR/uninstall-keep.out"
+
+  OMARCHY_BACKUP_INSTALL_DIR="$install_dir" \
+    OMARCHY_BACKUP_BIN_DIR="$bin_dir" \
+    "$ROOT_DIR/scripts/install.sh" --no-deps >"$TMP_DIR/uninstall-keep-install.out" 2>&1
+
+  mkdir -p "$(dirname -- "$config")" "$state_dir"
+  printf '{"keep":true}\n' >"$config"
+  printf 'state\n' >"$state_dir/keep"
+
+  PATH="$bin_dir:$PATH" \
+    OMARCHY_BACKUP_CONFIG="$config" \
+    OMARCHY_BACKUP_STATE_DIR="$state_dir" \
+    "$bin_dir/omarchy-backup" uninstall --yes --keep-local-data >"$output" 2>&1
+
+  if [[ ! -f "$config" || ! -f "$state_dir/keep" ]]; then
+    printf 'Expected config and state to be kept with --keep-local-data\n' >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Local config and state will be kept"
 }
 
 test_uninstall_refuses_source_checkout() {
@@ -743,7 +771,8 @@ run_test "tui retries until session password works" test_tui_retries_until_sessi
 run_test "tui backup shows running state and delta" test_tui_backup_shows_running_state_and_delta
 run_test "tui missing dependencies use omarchy pkg add" test_tui_missing_dependencies_use_omarchy_pkg_add
 run_test "installer installs local checkout wrapper" test_installer_installs_local_checkout_wrapper
-run_test "uninstall removes installed files but keeps config" test_uninstall_removes_installed_files_but_keeps_config
+run_test "uninstall removes installed files config and state" test_uninstall_removes_installed_files_config_and_state
+run_test "uninstall can keep local data" test_uninstall_can_keep_local_data
 run_test "uninstall refuses source checkout" test_uninstall_refuses_source_checkout
 
 printf 'ok: %s tests passed\n' "$pass_count"

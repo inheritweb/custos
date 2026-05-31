@@ -272,7 +272,7 @@ cmd_setup() {
 }
 
 cmd_uninstall() {
-  local yes=0 dry_run=0 purge_local_data=0 force=0
+  local yes=0 dry_run=0 keep_local_data=0 force=0
   local install_bin install_dir wrapper config_dir state_dir
 
   while (($#)); do
@@ -285,8 +285,8 @@ cmd_uninstall() {
         dry_run=1
         shift
         ;;
-      --purge-local-data)
-        purge_local_data=1
+      --keep-local-data)
+        keep_local_data=1
         shift
         ;;
       --force)
@@ -296,15 +296,15 @@ cmd_uninstall() {
       -h|--help|help)
         cat <<'USAGE'
 Usage:
-  omarchy-backup uninstall [--yes] [--dry-run] [--purge-local-data] [--force]
+  omarchy-backup uninstall [--yes] [--dry-run] [--keep-local-data] [--force]
 
-Removes the installed omarchy-backup command wrapper and app files.
-Backup repositories, rclone remotes, and local config are left alone by default.
+Removes the installed omarchy-backup command wrapper, app files, local config,
+and local state. Backup repositories and rclone remotes are left alone.
 
 Options:
   --yes                 Do not ask for confirmation
   --dry-run             Print what would be removed
-  --purge-local-data    Also remove local config and state directories
+  --keep-local-data     Keep local config and state directories
   --force               Allow uninstall even if this looks like a source checkout
 USAGE
         return 0
@@ -330,7 +330,7 @@ USAGE
   printf 'This will remove:\n'
   [[ -n "$wrapper" ]] && printf '  %s\n' "$wrapper"
   printf '  %s\n' "$install_dir"
-  if [[ "$purge_local_data" == "1" ]]; then
+  if [[ "$keep_local_data" == "0" ]]; then
     printf '  %s\n' "$config_dir"
     printf '  %s\n' "$state_dir"
   else
@@ -352,7 +352,7 @@ USAGE
   if [[ "$dry_run" == "1" ]]; then
     [[ -n "$wrapper" ]] && printf 'dry-run: rm -f %q\n' "$wrapper"
     printf 'dry-run: rm -rf %q\n' "$install_dir"
-    if [[ "$purge_local_data" == "1" ]]; then
+    if [[ "$keep_local_data" == "0" ]]; then
       printf 'dry-run: rm -rf %q\n' "$config_dir"
       printf 'dry-run: rm -rf %q\n' "$state_dir"
     fi
@@ -362,7 +362,7 @@ USAGE
   [[ -n "$wrapper" ]] && rm -f -- "$wrapper"
   rm -rf -- "$install_dir"
 
-  if [[ "$purge_local_data" == "1" ]]; then
+  if [[ "$keep_local_data" == "0" ]]; then
     rm -rf -- "$config_dir" "$state_dir"
   fi
 
