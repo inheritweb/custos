@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 
 TUI_WIDTH=100
+TUI_MODE="snapshots"
 TUI_FOCUS="actions"
 TUI_ACTION_INDEX=0
 TUI_SNAPSHOT_INDEX=0
+TUI_PATH_KIND="include"
+TUI_PATH_INCLUDE_INDEX=0
+TUI_PATH_EXCLUDE_INDEX=0
 TUI_STATUS="Ready"
 TUI_LOG=""
 TUI_SNAPSHOTS_JSON=""
@@ -189,6 +193,56 @@ tui_has_selected_snapshot() {
   [[ -n "$TUI_SNAPSHOTS_TSV" ]]
 }
 
+tui_path_values() {
+  local kind="$1"
+  tui_config_exists || return 0
+  jq -r --arg kind "$kind" '.paths[$kind][]?' "$CUSTOS_CONFIG"
+}
+
+tui_path_count() {
+  local kind="$1"
+  tui_config_exists || {
+    printf '0'
+    return 0
+  }
+  jq -r --arg kind "$kind" '.paths[$kind] | length' "$CUSTOS_CONFIG"
+}
+
+tui_path_index() {
+  case "$1" in
+    include) printf '%s' "$TUI_PATH_INCLUDE_INDEX" ;;
+    exclude) printf '%s' "$TUI_PATH_EXCLUDE_INDEX" ;;
+  esac
+}
+
+tui_set_path_index() {
+  local kind="$1" value="$2"
+  case "$kind" in
+    include) TUI_PATH_INCLUDE_INDEX="$value" ;;
+    exclude) TUI_PATH_EXCLUDE_INDEX="$value" ;;
+  esac
+}
+
+tui_clamp_path_index() {
+  local kind="$1" count index
+  count="$(tui_path_count "$kind")"
+  index="$(tui_path_index "$kind")"
+  ((count <= 0)) && {
+    tui_set_path_index "$kind" 0
+    return 0
+  }
+  ((index < 0)) && index=0
+  ((index >= count)) && index=$((count - 1))
+  tui_set_path_index "$kind" "$index"
+}
+
+tui_selected_path() {
+  local kind="$TUI_PATH_KIND" index
+  tui_clamp_path_index "$kind"
+  index="$(tui_path_index "$kind")"
+  tui_path_values "$kind" | sed -n "$((index + 1))p"
+}
+
 tui_read_key() {
   TUI_KEY=""
   if [[ -n "${CUSTOS_TUI_KEYS:-}" ]]; then
@@ -278,6 +332,17 @@ SUMMARY
 }
 
 tui_actions() {
+  if [[ "$TUI_MODE" == "paths" ]]; then
+    cat <<'ACTIONS'
+Add include
+Add exclude
+Remove selected path
+Back to snapshots
+Quit
+ACTIONS
+    return 0
+  fi
+
   if ! tui_config_exists; then
     cat <<'ACTIONS'
 Connect Google Drive
@@ -412,6 +477,87 @@ tui_render_snapshots() {
   tui_box_bottom "$focused"
 }
 
+tui_path_cell() {
+  local kind="$1" row="$2" value marker selected
+  local index start count
+
+  count="$(tui_path_count "$kind")"
+  index="$(tui_path_index "$kind")"
+  start=0
+  if ((index >= 7)); then
+    start=$((index - 6))
+  fi
+
+  value="$(tui_path_values "$kind" | sed -n "$((start + row + 1))p")"
+  if [[ -z "$value" ]]; then
+    if ((row == 0 && count == 0)); then
+      value="No ${kind} paths"
+    else
+      value=""
+    fi
+  fi
+
+  marker=" "
+  selected=0
+  if [[ "$kind" == "$TUI_PATH_KIND" && "$((start + row))" == "$index" && "$count" != "0" ]]; then
+    marker=">"
+    selected=1
+  fi
+
+  TUI_PATH_CELL_SELECTED="$selected"
+  TUI_PATH_CELL_MARKER="$marker"
+  TUI_PATH_CELL_VALUE="$(tui_trim "$value" 42)"
+}
+
+tui_render_paths() {
+  local focused=0 count=0 row include_cell exclude_cell
+  local include_selected include_marker include_value exclude_selected exclude_marker exclude_value
+  [[ "$TUI_MODAL_ACTIVE" != "1" && "$TUI_FOCUS" == "paths" ]] && focused=1
+
+  tui_clamp_path_index include
+  tui_clamp_path_index exclude
+
+  tui_box_top "Paths" "$focused"
+
+  local header
+  header="$(printf '  %-45s  %-45s' "Includes" "Excludes")"
+  if [[ "$focused" == "1" ]]; then
+    tui_box_colored_line "$header" "$focused" "$TUI_COLOR_HEADER"
+  else
+    tui_box_line "$header" "$focused"
+  fi
+  count=$((count + 1))
+
+  for ((row = 0; row < 7; row++)); do
+    tui_path_cell include "$row"
+    include_selected="$TUI_PATH_CELL_SELECTED"
+    include_marker="$TUI_PATH_CELL_MARKER"
+    include_value="$TUI_PATH_CELL_VALUE"
+    tui_path_cell exclude "$row"
+    exclude_selected="$TUI_PATH_CELL_SELECTED"
+    exclude_marker="$TUI_PATH_CELL_MARKER"
+    exclude_value="$TUI_PATH_CELL_VALUE"
+
+    local line
+    line="$(printf '%s %-43s  %s %-43s' "$include_marker" "$include_value" "$exclude_marker" "$exclude_value")"
+    if [[ "$focused" == "1" && ( "$include_selected" == "1" || "$exclude_selected" == "1" ) ]]; then
+      tui_box_colored_line "$line" "$focused" "$TUI_COLOR_SELECTED"
+    else
+      tui_box_line "$line" "$focused"
+    fi
+    count=$((count + 1))
+  done
+
+  tui_box_bottom "$focused"
+}
+
+tui_render_middle_pane() {
+  case "$TUI_MODE" in
+    paths) tui_render_paths ;;
+    *) tui_render_snapshots ;;
+  esac
+}
+
 tui_render_actions() {
   local focused=0 i
   [[ "$TUI_MODAL_ACTIVE" != "1" && "$TUI_FOCUS" == "actions" ]] && focused=1
@@ -446,12 +592,21 @@ tui_render_status() {
   tui_clear_line
   printf '%sLast action:%s %s\n' "$TUI_COLOR_CONTROL" "$TUI_COLOR_RESET" "$(tui_trim "$TUI_STATUS" "$((TUI_WIDTH - 13))")"
   tui_clear_line
-  printf '%sTab%s focus  %s↑/↓%s move in focused pane  %sEnter%s select  %sr%s refresh  %sq%s quit%s\n' \
-    "$TUI_COLOR_CONTROL" "$TUI_COLOR_RESET" \
-    "$TUI_COLOR_CONTROL" "$TUI_COLOR_RESET" \
-    "$TUI_COLOR_CONTROL" "$TUI_COLOR_RESET" \
-    "$TUI_COLOR_CONTROL" "$TUI_COLOR_RESET" \
-    "$TUI_COLOR_CONTROL" "$TUI_COLOR_RESET" "$TUI_COLOR_RESET"
+  if [[ "$TUI_MODE" == "paths" ]]; then
+    printf '%sTab%s focus  %s↑/↓%s move  %s←/→%s column  %sEnter%s remove  %sq%s quit%s\n' \
+      "$TUI_COLOR_CONTROL" "$TUI_COLOR_RESET" \
+      "$TUI_COLOR_CONTROL" "$TUI_COLOR_RESET" \
+      "$TUI_COLOR_CONTROL" "$TUI_COLOR_RESET" \
+      "$TUI_COLOR_CONTROL" "$TUI_COLOR_RESET" \
+      "$TUI_COLOR_CONTROL" "$TUI_COLOR_RESET" "$TUI_COLOR_RESET"
+  else
+    printf '%sTab%s focus  %s↑/↓%s move in focused pane  %sEnter%s select  %sr%s refresh  %sq%s quit%s\n' \
+      "$TUI_COLOR_CONTROL" "$TUI_COLOR_RESET" \
+      "$TUI_COLOR_CONTROL" "$TUI_COLOR_RESET" \
+      "$TUI_COLOR_CONTROL" "$TUI_COLOR_RESET" \
+      "$TUI_COLOR_CONTROL" "$TUI_COLOR_RESET" \
+      "$TUI_COLOR_CONTROL" "$TUI_COLOR_RESET" "$TUI_COLOR_RESET"
+  fi
 }
 
 tui_render_title() {
@@ -475,7 +630,7 @@ tui_render() {
   tui_render_config
   tui_clear_line
   printf '\n'
-  tui_render_snapshots
+  tui_render_middle_pane
   tui_clear_line
   printf '\n'
   tui_render_actions
@@ -883,33 +1038,70 @@ tui_action_browse_selected() {
 }
 
 tui_action_manage_paths() {
-  local action value
-  tui_render_modal "Protected Paths" "a add include"$'\n'"e add exclude"$'\n'"i remove include"$'\n'"x remove exclude"$'\n'"any other key cancels"
-  tui_read_key || true
-  action="$TUI_KEY"
-  case "$action" in
-    a)
-      value="$(tui_read_line "Include> ")" || return 1
-      [[ -n "$value" ]] && tui_capture tui_cli paths include add "$value"
-      ;;
-    e)
-      value="$(tui_read_line "Exclude> ")" || return 1
-      [[ -n "$value" ]] && tui_capture tui_cli paths exclude add "$value"
-      ;;
-    i)
-      value="$(tui_read_line "Remove include> ")" || return 1
-      [[ -n "$value" ]] && tui_capture tui_cli paths include remove "$value"
-      ;;
-    x)
-      value="$(tui_read_line "Remove exclude> ")" || return 1
-      [[ -n "$value" ]] && tui_capture tui_cli paths exclude remove "$value"
-      ;;
-    *)
-      TUI_STATUS="Path change cancelled"
-      return 0
-      ;;
+  TUI_MODE="paths"
+  TUI_FOCUS="paths"
+  TUI_ACTION_INDEX=0
+  tui_clamp_path_index include
+  tui_clamp_path_index exclude
+  TUI_STATUS="Path management open"
+}
+
+tui_action_back_to_snapshots() {
+  TUI_MODE="snapshots"
+  TUI_FOCUS="actions"
+  TUI_ACTION_INDEX=0
+  TUI_STATUS="Snapshot view restored"
+}
+
+tui_action_add_path() {
+  local kind="$1" label value
+  case "$kind" in
+    include) label="Include" ;;
+    exclude) label="Exclude" ;;
+    *) return 1 ;;
   esac
-  TUI_STATUS="Paths updated"
+
+  tui_render_modal "Add $label" "Enter the $kind path or pattern to add."
+  value="$(tui_read_line "$label> ")" || return 1
+  if [[ -z "$value" ]]; then
+    TUI_STATUS="Path add cancelled"
+    return 0
+  fi
+
+  if tui_capture tui_cli paths "$kind" add "$value"; then
+    TUI_PATH_KIND="$kind"
+    tui_set_path_index "$kind" "$(($(tui_path_count "$kind") - 1))"
+    tui_clamp_path_index "$kind"
+    TUI_STATUS="$label path added"
+  else
+    TUI_STATUS="$label path add failed"
+  fi
+}
+
+tui_action_remove_selected_path() {
+  local kind="$TUI_PATH_KIND" value label
+  value="$(tui_selected_path)"
+  if [[ -z "$value" ]]; then
+    TUI_STATUS="No path selected"
+    return 1
+  fi
+
+  case "$kind" in
+    include) label="include" ;;
+    exclude) label="exclude" ;;
+    *) return 1 ;;
+  esac
+
+  if tui_confirm "Remove $label path?"$'\n\n'"$value"; then
+    if tui_capture tui_cli paths "$kind" remove "$value"; then
+      tui_clamp_path_index "$kind"
+      TUI_STATUS="Path removed"
+    else
+      TUI_STATUS="Path remove failed"
+    fi
+  else
+    TUI_STATUS="Path remove cancelled"
+  fi
 }
 
 tui_action_setup_repository() {
@@ -972,6 +1164,10 @@ tui_activate_action() {
     "Browse selected snapshot") tui_action_browse_selected ;;
     "Refresh snapshots") tui_refresh_snapshots ;;
     "Manage paths") tui_action_manage_paths ;;
+    "Add include") tui_action_add_path include ;;
+    "Add exclude") tui_action_add_path exclude ;;
+    "Remove selected path") tui_action_remove_selected_path ;;
+    "Back to snapshots") tui_action_back_to_snapshots ;;
     "Check repository")
       tui_capture_repo check && TUI_STATUS="Repository check passed" || TUI_STATUS="Repository check failed"
       ;;
@@ -1005,11 +1201,39 @@ tui_move_selection() {
       ((TUI_SNAPSHOT_INDEX < 0)) && TUI_SNAPSHOT_INDEX=0
       ((TUI_SNAPSHOT_INDEX >= count)) && TUI_SNAPSHOT_INDEX=$((count - 1))
       ;;
+    paths)
+      local count index
+      count="$(tui_path_count "$TUI_PATH_KIND")"
+      ((count == 0)) && return 0
+      index="$(tui_path_index "$TUI_PATH_KIND")"
+      index=$((index + direction))
+      ((index < 0)) && index=0
+      ((index >= count)) && index=$((count - 1))
+      tui_set_path_index "$TUI_PATH_KIND" "$index"
+      ;;
   esac
   return 0
 }
 
+tui_move_path_column() {
+  [[ "$TUI_MODE" == "paths" && "$TUI_FOCUS" == "paths" ]] || return 0
+  case "$TUI_PATH_KIND" in
+    include) TUI_PATH_KIND="exclude" ;;
+    exclude) TUI_PATH_KIND="include" ;;
+  esac
+  tui_clamp_path_index "$TUI_PATH_KIND"
+}
+
 tui_next_focus() {
+  if [[ "$TUI_MODE" == "paths" ]]; then
+    case "$TUI_FOCUS" in
+      paths) TUI_FOCUS="actions" ;;
+      actions) TUI_FOCUS="paths" ;;
+      *) TUI_FOCUS="paths" ;;
+    esac
+    return 0
+  fi
+
   case "$TUI_FOCUS" in
     snapshots) TUI_FOCUS="actions" ;;
     actions) TUI_FOCUS="snapshots" ;;
@@ -1053,8 +1277,22 @@ tui_main() {
       $'\t') tui_next_focus ;;
       $'\033[A'|k|K) tui_move_selection -1 ;;
       $'\033[B'|j|J) tui_move_selection 1 ;;
-      "") tui_activate_action || [[ "$?" != "2" ]] || break ;;
-      $'\n') tui_activate_action || [[ "$?" != "2" ]] || break ;;
+      $'\033[D'|h|H) tui_move_path_column ;;
+      $'\033[C'|l|L) tui_move_path_column ;;
+      "")
+        if [[ "$TUI_MODE" == "paths" && "$TUI_FOCUS" == "paths" ]]; then
+          tui_action_remove_selected_path || true
+        else
+          tui_activate_action || [[ "$?" != "2" ]] || break
+        fi
+        ;;
+      $'\n')
+        if [[ "$TUI_MODE" == "paths" && "$TUI_FOCUS" == "paths" ]]; then
+          tui_action_remove_selected_path || true
+        else
+          tui_activate_action || [[ "$?" != "2" ]] || break
+        fi
+        ;;
     esac
 
     if [[ -z "${CUSTOS_TUI_KEYS:-}" && ! -e /dev/tty ]]; then

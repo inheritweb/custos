@@ -671,6 +671,66 @@ test_tui_backup_shows_running_state_and_delta() {
   assert_contains "$output" "Added to the repository: 18 MiB"
 }
 
+test_tui_manage_paths_shows_existing_paths() {
+  local config="$TMP_DIR/tui-paths-view.json"
+  local output="$TMP_DIR/tui-paths-view.out"
+
+  make_config "$config"
+  CUSTOS_CONFIG="$config" "$CLI" paths include add '~/Projects' >/dev/null
+  CUSTOS_CONFIG="$config" "$CLI" paths exclude add '**/coverage' >/dev/null
+
+  if ! CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS=$'\njj\nq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+    sed -n '1,420p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Paths"
+  assert_contains "$output" "Includes"
+  assert_contains "$output" "Excludes"
+  assert_contains "$output" "~/Projects"
+  assert_contains "$output" "**/coverage"
+  assert_contains "$output" "Add include"
+  assert_contains "$output" "Back to snapshots"
+}
+
+test_tui_manage_paths_removes_selected_include() {
+  local config="$TMP_DIR/tui-paths-remove.json"
+  local output="$TMP_DIR/tui-paths-remove.out"
+
+  make_config "$config"
+
+  if ! CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS=$'\njj\n\nyq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+    sed -n '1,420p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Remove include path?"
+  assert_contains "$output" "Path removed"
+  if jq -e '.paths.include[] | select(. == "~/Documents")' "$config" >/dev/null; then
+    printf 'Expected selected include path to be removed\n' >&2
+    return 1
+  fi
+}
+
+test_tui_manage_paths_adds_include_from_actions() {
+  local config="$TMP_DIR/tui-paths-add.json"
+  local output="$TMP_DIR/tui-paths-add.out"
+
+  make_config "$config"
+
+  if ! CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_INPUT='~/Vault' CUSTOS_TUI_KEYS=$'\njj\n\t\nq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+    sed -n '1,420p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Add Include"
+  assert_contains "$output" "Include path added"
+  if ! jq -e '.paths.include[] | select(. == "~/Vault")' "$config" >/dev/null; then
+    printf 'Expected ~/Vault include path to be added\n' >&2
+    return 1
+  fi
+}
+
 test_tui_missing_dependencies_show_common_package_managers() {
   local config="$TMP_DIR/tui-missing-deps.json"
   local tui_bin="$TMP_DIR/tui-missing-bin"
@@ -818,6 +878,9 @@ run_test "tui snapshot header is orange when focused" test_tui_snapshot_header_i
 run_test "tui session password bootstraps snapshots" test_tui_session_password_bootstraps_snapshots
 run_test "tui retries until session password works" test_tui_retries_until_session_password_works
 run_test "tui backup shows running state and delta" test_tui_backup_shows_running_state_and_delta
+run_test "tui manage paths shows existing paths" test_tui_manage_paths_shows_existing_paths
+run_test "tui manage paths removes selected include" test_tui_manage_paths_removes_selected_include
+run_test "tui manage paths adds include from actions" test_tui_manage_paths_adds_include_from_actions
 run_test "tui missing dependencies show common package managers" test_tui_missing_dependencies_show_common_package_managers
 run_test "installer installs local checkout wrapper" test_installer_installs_local_checkout_wrapper
 run_test "uninstall removes installed files config and state" test_uninstall_removes_installed_files_config_and_state
