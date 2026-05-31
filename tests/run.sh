@@ -46,6 +46,10 @@ for arg in "$@"; do
   fi
 
   if [[ "$arg" == "snapshots" ]]; then
+    if [[ "${RESTIC_REPOSITORY_MISSING:-0}" == "1" ]]; then
+      printf 'Fatal: repository does not exist: unable to open config file: <config/> does not exist\n' >&2
+      exit 12
+    fi
     if [[ -n "${RESTIC_SNAPSHOTS_JSON:-}" ]]; then
       printf '%s\n' "$RESTIC_SNAPSHOTS_JSON"
       exit 0
@@ -432,6 +436,23 @@ test_tui_configured_exit_starts_cleanly() {
   assert_not_contains "$output" "Browse selected snapshot"
 }
 
+test_tui_missing_repository_does_not_prompt_for_password() {
+  local config="$TMP_DIR/tui-missing-repo.json"
+  local output="$TMP_DIR/tui-missing-repo.out"
+
+  make_config "$config"
+
+  if ! RESTIC_REPOSITORY_MISSING=1 OMARCHY_BACKUP_TUI_KEYS="q" OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+    sed -n '1,260p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Repository is not initialized. Use Setup repository."
+  assert_contains "$output" "Setup repository"
+  assert_not_contains "$output" "Repository Password"
+  assert_not_contains "$output" "Backup now"
+}
+
 test_tui_down_navigation_does_not_exit() {
   local config="$TMP_DIR/tui-navigation.json"
   local output="$TMP_DIR/tui-navigation.out"
@@ -618,6 +639,7 @@ run_test "missing dependency guidance uses noninteractive Omarchy command" test_
 run_test "remote setup suppresses rclone token output" test_remote_setup_suppresses_rclone_token_output
 run_test "tui first-run exit starts cleanly" test_tui_first_run_exit_starts_cleanly
 run_test "tui configured exit starts cleanly" test_tui_configured_exit_starts_cleanly
+run_test "tui missing repository does not prompt for password" test_tui_missing_repository_does_not_prompt_for_password
 run_test "tui down navigation does not exit" test_tui_down_navigation_does_not_exit
 run_test "tui refresh snapshots ignores status stderr" test_tui_refresh_snapshots_ignores_status_stderr
 run_test "tui snapshot rows are readable and selectable" test_tui_snapshot_rows_are_readable_and_selectable

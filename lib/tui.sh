@@ -9,6 +9,7 @@ TUI_LOG=""
 TUI_SNAPSHOTS_JSON=""
 TUI_SNAPSHOTS_TSV=""
 TUI_SNAPSHOTS_LOADED=0
+TUI_REPOSITORY_READY="unknown"
 TUI_KEY=""
 TUI_PASSWORD_VALUE=""
 TUI_SCREEN_ACTIVE=0
@@ -277,6 +278,16 @@ ACTIONS
     return 0
   fi
 
+  if [[ "$TUI_REPOSITORY_READY" == "0" ]]; then
+    cat <<'ACTIONS'
+Setup repository
+Restore config from remote
+Doctor
+Quit
+ACTIONS
+    return 0
+  fi
+
   printf '%s\n' "Backup now"
   if tui_has_selected_snapshot; then
     printf '%s\n' "Restore selected snapshot"
@@ -445,6 +456,37 @@ tui_password_command_available() {
   return 1
 }
 
+tui_probe_repository_state() {
+  local error_file
+  local -a base_args
+
+  tui_config_exists || return 0
+
+  mapfile -d '' -t base_args < <(restic_base_args)
+  error_file="$(mktemp)"
+
+  if (
+    export RESTIC_PASSWORD="omarchy-backup-probe"
+    unset RESTIC_PASSWORD_COMMAND
+    restic "${base_args[@]}" snapshots --json >/dev/null 2>"$error_file"
+  ); then
+    TUI_REPOSITORY_READY="1"
+    rm -f "$error_file"
+    return 0
+  fi
+
+  if grep -Eiq 'repository does not exist|unable to open config file|Is there a repository' "$error_file"; then
+    TUI_REPOSITORY_READY="0"
+    TUI_STATUS="Repository is not initialized. Use Setup repository."
+    TUI_LOG="$(cat "$error_file")"
+    rm -f "$error_file"
+    return 0
+  fi
+
+  TUI_REPOSITORY_READY="1"
+  rm -f "$error_file"
+}
+
 tui_prompt_session_password() {
   tui_config_exists || return 0
   tui_password_command_available && return 0
@@ -463,6 +505,10 @@ tui_bootstrap_snapshots() {
   local first_prompt=1
 
   tui_config_exists || return 0
+  if [[ "$TUI_REPOSITORY_READY" == "0" ]]; then
+    return 0
+  fi
+
   if tui_password_command_available; then
     tui_refresh_snapshots || true
     return 0
@@ -564,6 +610,12 @@ tui_fetch_snapshots_with_loading() {
 
 tui_refresh_snapshots() {
   local parse_error
+
+  if [[ "$TUI_REPOSITORY_READY" == "0" ]]; then
+    TUI_STATUS="Repository is not initialized. Use Setup repository."
+    return 1
+  fi
+
   TUI_STATUS="Loading snapshots..."
   tui_render_loading "Loading snapshots" "|"
   if ! tui_password_env_prefix; then
@@ -768,7 +820,13 @@ tui_activate_action() {
       tui_capture_repo check && TUI_STATUS="Repository check passed" || TUI_STATUS="Repository check failed"
       ;;
     "Setup repository")
-      tui_capture tui_cli setup && TUI_STATUS="Setup complete" || TUI_STATUS="Setup failed"
+      if tui_capture tui_cli setup; then
+        TUI_REPOSITORY_READY="1"
+        TUI_STATUS="Setup complete"
+        tui_bootstrap_snapshots || true
+      else
+        TUI_STATUS="Setup failed"
+      fi
       ;;
     "Prune repository")
       tui_confirm "Prune unreferenced repository data?" &&
@@ -818,6 +876,7 @@ tui_main() {
   tui_require_dependencies
   tui_enter_screen
   trap 'tui_exit_screen; exit 130' INT TERM
+  tui_probe_repository_state
   tui_bootstrap_snapshots || true
 
   while true; do

@@ -193,7 +193,7 @@ install_from_checkout() {
 install_from_github() {
   local tmp_dir
   tmp_dir="$(mktemp -d)"
-  trap 'rm -rf "$tmp_dir"' EXIT
+  trap "rm -rf '$tmp_dir'" EXIT
   fetch_source "$tmp_dir/source"
   install_files "$tmp_dir/source"
 }
