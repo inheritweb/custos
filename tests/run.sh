@@ -479,6 +479,26 @@ test_tui_missing_remote_does_not_prompt_for_password() {
   assert_not_contains "$output" "Backup now"
 }
 
+test_tui_setup_repository_confirms_and_reuses_password() {
+  local config="$TMP_DIR/tui-setup-repository.json"
+  local output="$TMP_DIR/tui-setup-repository.out"
+  local snapshots
+
+  make_config "$config"
+  snapshots='[{"short_id":"abc12345","time":"2026-05-30T21:32:39+01:00","hostname":"vm","paths":["/home/test"]}]'
+
+  if ! RCLONE_REPOSITORY_CONFIG_MISSING=1 RESTIC_SNAPSHOTS_JSON="$snapshots" OMARCHY_BACKUP_TUI_PASSWORD=$'new-password\nnew-password' OMARCHY_BACKUP_TUI_KEYS=$'\nq' OMARCHY_BACKUP_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+    sed -n '1,260p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "New Repository Password"
+  assert_contains "$output" "Confirm Repository Password"
+  assert_contains "$output" "Initializing repository"
+  assert_contains "$output" "Snapshots loaded"
+  assert_contains "$RESTIC_LOG" "RESTIC_PASSWORD=new-password"
+}
+
 test_tui_down_navigation_does_not_exit() {
   local config="$TMP_DIR/tui-navigation.json"
   local output="$TMP_DIR/tui-navigation.out"
@@ -667,6 +687,7 @@ run_test "tui first-run exit starts cleanly" test_tui_first_run_exit_starts_clea
 run_test "tui configured exit starts cleanly" test_tui_configured_exit_starts_cleanly
 run_test "tui missing repository does not prompt for password" test_tui_missing_repository_does_not_prompt_for_password
 run_test "tui missing remote does not prompt for password" test_tui_missing_remote_does_not_prompt_for_password
+run_test "tui setup repository confirms and reuses password" test_tui_setup_repository_confirms_and_reuses_password
 run_test "tui down navigation does not exit" test_tui_down_navigation_does_not_exit
 run_test "tui refresh snapshots ignores status stderr" test_tui_refresh_snapshots_ignores_status_stderr
 run_test "tui snapshot rows are readable and selectable" test_tui_snapshot_rows_are_readable_and_selectable

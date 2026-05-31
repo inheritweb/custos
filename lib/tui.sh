@@ -55,11 +55,10 @@ tui_enter_screen() {
     TUI_SCREEN_ACTIVE=1
   fi
 
-  if [[ -e /dev/tty ]]; then
-    TUI_STTY_STATE="$(stty -g </dev/tty 2>/dev/null || true)"
-    if [[ -n "$TUI_STTY_STATE" ]]; then
-      stty -echo </dev/tty 2>/dev/null || true
-    fi
+  if TUI_STTY_STATE="$(stty -g </dev/tty 2>/dev/null)"; then
+    stty -echo </dev/tty 2>/dev/null || true
+  else
+    TUI_STTY_STATE=""
   fi
 }
 
@@ -535,6 +534,7 @@ tui_probe_repository_state() {
     return 0
   fi
 
+  remote_load
   mapfile -d '' -t base_args < <(restic_base_args)
   error_file="$(mktemp)"
 
@@ -561,10 +561,13 @@ tui_probe_repository_state() {
 }
 
 tui_prompt_session_password() {
+  local message="${1:-Enter the repository password for this TUI session.}"
+
   tui_config_exists || return 0
   tui_password_command_available && return 0
 
-  tui_render_modal "Repository Password" "Enter the repository password for this TUI session."
+  TUI_STATUS="Waiting for repository password"
+  tui_render_modal "Repository Password" "$message"$'\n\n'"This password is kept only in this running TUI."
   tui_read_password "Password> " || return 1
   if [[ -z "$TUI_PASSWORD_VALUE" ]]; then
     TUI_STATUS="Repository password not set"
@@ -572,6 +575,39 @@ tui_prompt_session_password() {
   fi
   export RESTIC_PASSWORD="$TUI_PASSWORD_VALUE"
   TUI_STATUS="Repository password set for this session"
+}
+
+tui_prompt_new_repository_password() {
+  local first second
+
+  while true; do
+    TUI_STATUS="Waiting for new repository password"
+    tui_render_modal "New Repository Password" "Create the password for this backup repository."$'\n\n'"You will need this password to restore your backups. It cannot be recovered if lost."
+    tui_read_password "New password> " || return 1
+    first="$TUI_PASSWORD_VALUE"
+
+    if [[ -z "$first" ]]; then
+      TUI_STATUS="Repository password cannot be empty"
+      tui_render_modal "New Repository Password" "Repository password cannot be empty."$'\n\n'"Press any key to try again."
+      tui_read_key || true
+      continue
+    fi
+
+    TUI_STATUS="Waiting for password confirmation"
+    tui_render_modal "Confirm Repository Password" "Enter the new repository password again."
+    tui_read_password "Confirm password> " || return 1
+    second="$TUI_PASSWORD_VALUE"
+
+    if [[ "$first" == "$second" ]]; then
+      export RESTIC_PASSWORD="$first"
+      TUI_STATUS="Repository password set for this session"
+      return 0
+    fi
+
+    TUI_STATUS="Repository passwords did not match"
+    tui_render_modal "Password Mismatch" "The two repository passwords did not match."$'\n\n'"Press any key to try again."
+    tui_read_key || true
+  done
 }
 
 tui_bootstrap_snapshots() {
@@ -593,7 +629,7 @@ tui_bootstrap_snapshots() {
       TUI_STATUS="Repository password did not work"
     fi
 
-    if ! tui_prompt_session_password; then
+    if ! tui_prompt_session_password "$([[ "$first_prompt" == "0" ]] && printf 'Repository password did not work. Try again.' || printf 'Enter the repository password for this TUI session.')"; then
       return 1
     fi
 
@@ -872,6 +908,27 @@ tui_action_manage_paths() {
   TUI_STATUS="Paths updated"
 }
 
+tui_action_setup_repository() {
+  if [[ "$TUI_REMOTE_READY" == "0" ]]; then
+    TUI_STATUS="Google Drive is not connected. Use Connect Google Drive."
+    return 1
+  fi
+
+  if [[ "$TUI_REPOSITORY_READY" == "0" ]] && ! tui_prompt_new_repository_password; then
+    TUI_STATUS="Repository setup cancelled"
+    return 1
+  fi
+
+  if tui_capture_with_loading "Initializing repository" tui_cli init; then
+    TUI_REPOSITORY_READY="1"
+    TUI_STATUS="Repository initialized"
+    tui_refresh_snapshots || true
+  else
+    TUI_STATUS="Repository setup failed"
+    return 1
+  fi
+}
+
 tui_activate_action() {
   tui_load_actions
   local action="${TUI_ACTIONS[$TUI_ACTION_INDEX]}"
@@ -905,15 +962,7 @@ tui_activate_action() {
     "Check repository")
       tui_capture_repo check && TUI_STATUS="Repository check passed" || TUI_STATUS="Repository check failed"
       ;;
-    "Setup repository")
-      if tui_capture tui_cli setup; then
-        TUI_REPOSITORY_READY="1"
-        TUI_STATUS="Setup complete"
-        tui_bootstrap_snapshots || true
-      else
-        TUI_STATUS="Setup failed"
-      fi
-      ;;
+    "Setup repository") tui_action_setup_repository ;;
     "Prune repository")
       tui_confirm "Prune unreferenced repository data?" &&
         tui_capture_repo prune && TUI_STATUS="Prune complete" || TUI_STATUS="Prune cancelled or failed"
