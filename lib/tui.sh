@@ -1239,7 +1239,7 @@ tui_activate_action() {
     "Setup repository") tui_action_setup_repository ;;
     "Prune repository")
       tui_confirm "Prune unreferenced repository data?" &&
-        tui_capture_repo prune && TUI_STATUS="Prune complete" || TUI_STATUS="Prune cancelled or failed"
+        tui_capture_repo_with_loading "Pruning repository" prune && TUI_STATUS="Prune complete" || TUI_STATUS="Prune cancelled or failed"
       ;;
     "Unlock stale locks")
       tui_confirm "Unlock stale repository locks?" &&
