@@ -778,7 +778,7 @@ tui_render_title() {
   printf '%s%s\\____/\\__,_/____/\\__/\\____/____/  %s\n' "$TUI_COLOR_ITALIC" "$TUI_COLOR_FOCUS" "$TUI_COLOR_RESET"
 }
 
-tui_render() {
+tui_render_frame() {
   tui_clear
   tui_render_title
   tui_clear_line
@@ -794,6 +794,12 @@ tui_render() {
   printf '\n'
   tui_render_status
   printf '\033[J'
+}
+
+tui_render() {
+  local frame
+  frame="$(tui_render_frame)"
+  printf '\033[?2026h%s\033[?2026l' "$frame"
 }
 
 tui_password_command_available() {
