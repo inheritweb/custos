@@ -727,10 +727,10 @@ tui_render_actions() {
     else
       tui_box_line "$line" "$focused"
     fi
-    ((i >= 10)) && break
+    ((i >= 11)) && break
   done
-  if ((${#TUI_ACTIONS[@]} < 11)); then
-    tui_box_blank_lines $((11 - ${#TUI_ACTIONS[@]})) "$focused"
+  if ((${#TUI_ACTIONS[@]} < 12)); then
+    tui_box_blank_lines $((12 - ${#TUI_ACTIONS[@]})) "$focused"
   fi
   tui_box_bottom "$focused"
 }
@@ -1204,7 +1204,7 @@ tui_action_manage_paths() {
 
 tui_action_back_to_repositories() {
   TUI_MODE="repositories"
-  TUI_FOCUS="repositories"
+  TUI_FOCUS="actions"
   TUI_ACTION_INDEX=0
   TUI_STATUS="Repository list restored"
 }
@@ -1225,7 +1225,11 @@ tui_action_connect_selected_repository() {
 
   tui_select_repository "$job_id"
   TUI_STATUS="Checking repository $job_id..."
+  tui_render_loading "Checking repository $job_id" "|"
   tui_probe_remote_state
+  if [[ "$TUI_REMOTE_READY" != "0" ]]; then
+    tui_render_loading "Checking repository storage" "/"
+  fi
   tui_probe_repository_state
   if [[ "$TUI_REMOTE_READY" == "0" || "$TUI_REPOSITORY_READY" == "0" ]]; then
     TUI_STATUS="Repository $job_id needs setup"
@@ -1505,18 +1509,18 @@ tui_main() {
 
   if tui_config_exists; then
     TUI_STATUS="Checking Google Drive connection..."
-    tui_render
+    tui_render_loading "Checking Google Drive connection" "|"
   fi
   tui_probe_remote_state
 
   if tui_config_exists && [[ "$TUI_REMOTE_READY" != "0" ]]; then
     TUI_STATUS="Checking repository setup..."
-    tui_render
+    tui_render_loading "Checking repository setup" "/"
   fi
   tui_probe_repository_state
   if tui_config_exists; then
     TUI_MODE="repositories"
-    TUI_FOCUS="repositories"
+    TUI_FOCUS="actions"
   else
     TUI_FOCUS="actions"
   fi

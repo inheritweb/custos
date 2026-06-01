@@ -550,6 +550,8 @@ test_tui_configured_exit_starts_cleanly() {
   assert_contains "$output" "Repositories"
   assert_contains "$output" "Actions"
   assert_contains "$output" "Remote"
+  assert_contains "$output" "Checking Google Drive connection"
+  assert_contains "$output" "Checking repository setup"
   assert_contains "$output" "Connect selected repository"
   assert_not_contains "$output" "Repository Password"
   assert_not_contains "$output" "Snapshots loaded"
@@ -622,6 +624,7 @@ test_tui_down_navigation_does_not_exit() {
   fi
 
   assert_contains "$output" "Connect selected repository"
+  assert_contains "$output" "> Add repository"
   assert_not_contains "$output" "Repository operation failed"
 }
 
