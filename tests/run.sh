@@ -628,6 +628,44 @@ test_tui_down_navigation_does_not_exit() {
   assert_not_contains "$output" "Repository operation failed"
 }
 
+test_tui_add_repository_selects_remote_kind() {
+  local config="$TMP_DIR/tui-add-repository.json"
+  local output="$TMP_DIR/tui-add-repository.out"
+  local jobs="$TMP_DIR/tui-add-repository-jobs.out"
+
+  make_config "$config"
+
+  if ! CUSTOS_TUI_INPUT=$'media\n~/Media\ngdrive:backups/media' CUSTOS_TUI_KEYS=$'j\n\nq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+    sed -n '1,260p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Remote Type"
+  assert_contains "$output" "Google Drive"
+  CUSTOS_CONFIG="$config" "$CLI" jobs list >"$jobs"
+  assert_contains "$jobs" "media"
+  assert_contains "$jobs" "gdrive"
+  assert_contains "$config" '"path": "backups/media"'
+}
+
+test_tui_add_repository_escape_cancels() {
+  local config="$TMP_DIR/tui-add-repository-cancel.json"
+  local output="$TMP_DIR/tui-add-repository-cancel.out"
+  local jobs="$TMP_DIR/tui-add-repository-cancel-jobs.out"
+
+  make_config "$config"
+
+  if ! CUSTOS_TUI_INPUT='media' CUSTOS_TUI_KEYS=$'j\n\033q' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+    sed -n '1,260p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Remote Type"
+  assert_contains "$output" "Repository add cancelled"
+  CUSTOS_CONFIG="$config" "$CLI" jobs list >"$jobs"
+  assert_not_contains "$jobs" "media"
+}
+
 test_tui_refresh_snapshots_ignores_status_stderr() {
   local config="$TMP_DIR/tui-refresh.json"
   local output="$TMP_DIR/tui-refresh.out"
@@ -1040,6 +1078,8 @@ run_test "tui missing repository does not prompt for password" test_tui_missing_
 run_test "tui missing remote does not prompt for password" test_tui_missing_remote_does_not_prompt_for_password
 run_test "tui setup repository confirms and reuses password" test_tui_setup_repository_confirms_and_reuses_password
 run_test "tui down navigation does not exit" test_tui_down_navigation_does_not_exit
+run_test "tui add repository selects remote kind" test_tui_add_repository_selects_remote_kind
+run_test "tui add repository escape cancels" test_tui_add_repository_escape_cancels
 run_test "tui refresh snapshots ignores status stderr" test_tui_refresh_snapshots_ignores_status_stderr
 run_test "tui restore config shows loading state" test_tui_restore_config_shows_loading_state
 run_test "tui snapshot rows are readable and selectable" test_tui_snapshot_rows_are_readable_and_selectable

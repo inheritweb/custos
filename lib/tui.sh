@@ -290,17 +290,45 @@ tui_read_key() {
 
 tui_read_line() {
   local prompt="$1"
-  local value=""
+  local value="" key
+  TUI_LINE_VALUE=""
+
   if [[ -n "${CUSTOS_TUI_INPUT:-}" ]]; then
-    value="$CUSTOS_TUI_INPUT"
-    CUSTOS_TUI_INPUT=""
-    printf '%s' "$value"
+    if [[ "$CUSTOS_TUI_INPUT" == *$'\n'* ]]; then
+      value="${CUSTOS_TUI_INPUT%%$'\n'*}"
+      CUSTOS_TUI_INPUT="${CUSTOS_TUI_INPUT#*$'\n'}"
+    else
+      value="$CUSTOS_TUI_INPUT"
+      CUSTOS_TUI_INPUT=""
+    fi
+    TUI_LINE_VALUE="$value"
     return 0
   fi
 
   printf '%s' "$prompt" >/dev/tty
-  IFS= read -r value </dev/tty || return 1
-  printf '%s' "$value"
+  while IFS= read -rsn1 key </dev/tty; do
+    case "$key" in
+      $'\033')
+        printf '\n' >/dev/tty
+        return 130
+        ;;
+      $'\n'|"")
+        printf '\n' >/dev/tty
+        break
+        ;;
+      $'\177'|$'\b')
+        if ((${#value} > 0)); then
+          value="${value%?}"
+          printf '\b \b' >/dev/tty
+        fi
+        ;;
+      *)
+        value+="$key"
+        printf '%s' "$key" >/dev/tty
+        ;;
+    esac
+  done
+  TUI_LINE_VALUE="$value"
 }
 
 tui_read_password() {
@@ -320,6 +348,31 @@ tui_read_password() {
   printf '%s' "$prompt" >/dev/tty
   IFS= read -rs TUI_PASSWORD_VALUE </dev/tty || return 1
   printf '\n' >/dev/tty
+}
+
+tui_select_remote_kind() {
+  local key
+
+  while true; do
+    tui_render_modal "Remote Type" "Select the remote kind for this repository."$'\n\n'"> Google Drive"$'\n\n'"Enter selects. Esc cancels."
+    tui_read_key || return 1
+    key="$TUI_KEY"
+
+    case "$key" in
+      $'\033')
+        TUI_REMOTE_KIND_VALUE=""
+        return 130
+        ;;
+      ""|$'\n')
+        TUI_REMOTE_KIND_VALUE="gdrive"
+        return 0
+        ;;
+      q|Q)
+        TUI_REMOTE_KIND_VALUE=""
+        return 130
+        ;;
+    esac
+  done
 }
 
 tui_confirm() {
@@ -1253,20 +1306,44 @@ tui_action_connect_selected_repository() {
 }
 
 tui_action_add_repository() {
-  local id source remote
+  local id source remote remote_kind
   tui_render_modal "Add Repository" "Enter a short repository id."
-  id="$(tui_read_line "ID> ")" || return 1
+  tui_read_line "ID> " || {
+    TUI_STATUS="Repository add cancelled"
+    return 0
+  }
+  id="$TUI_LINE_VALUE"
   [[ -n "$id" ]] || {
     TUI_STATUS="Repository add cancelled"
     return 0
   }
+
+  if ! tui_select_remote_kind; then
+    TUI_STATUS="Repository add cancelled"
+    return 0
+  fi
+  remote_kind="$TUI_REMOTE_KIND_VALUE"
+
   tui_render_modal "Add Repository" "Enter the source path to back up."
-  source="$(tui_read_line "Source> ")" || return 1
-  tui_render_modal "Add Repository" "Enter the remote path, for example gdrive:backups/home."
-  remote="$(tui_read_line "Remote> ")" || return 1
+  tui_read_line "Source> " || {
+    TUI_STATUS="Repository add cancelled"
+    return 0
+  }
+  source="$TUI_LINE_VALUE"
+  tui_render_modal "Add Repository" "Enter the Google Drive remote path, for example gdrive:backups/home."
+  tui_read_line "Remote> " || {
+    TUI_STATUS="Repository add cancelled"
+    return 0
+  }
+  remote="$TUI_LINE_VALUE"
   if [[ -z "$source" || -z "$remote" ]]; then
     TUI_STATUS="Repository add cancelled"
     return 0
+  fi
+
+  if [[ "$remote_kind" != "gdrive" ]]; then
+    TUI_STATUS="Remote kind is not supported yet"
+    return 1
   fi
 
   if tui_capture tui_cli jobs add "$id" --source "$source" --remote "$remote"; then
@@ -1286,7 +1363,8 @@ tui_action_add_path() {
   esac
 
   tui_render_modal "Add $label" "Enter the $kind path or pattern to add."
-  value="$(tui_read_line "$label> ")" || return 1
+  tui_read_line "$label> " || return 1
+  value="$TUI_LINE_VALUE"
   if [[ -z "$value" ]]; then
     TUI_STATUS="Path add cancelled"
     return 0
