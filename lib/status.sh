@@ -9,8 +9,9 @@ status_show() {
   repository="$(remote_repository_url)"
 
   printf 'Config: %s\n' "$CUSTOS_CONFIG"
+  printf 'Job: %s\n' "$(config_current_job_id)"
   printf 'Repository: %s\n' "$repository"
-  printf 'Remote type: %s\n' "$(config_get '.remote.type')"
+  printf 'Remote type: %s\n' "$(config_job_get '.remote.type')"
   printf 'Hostname: %s\n' "$(config_hostname)"
   printf 'Protected paths:\n'
   config_include_paths | sed 's/^/  - /'

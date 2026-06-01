@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
 remote_name() {
-  config_get_optional '.remote.name' | sed 's/:$//'
+  config_job_get_optional '.remote.name' | sed 's/:$//'
 }
 
 remote_path() {
-  config_get '.remote.path'
+  config_job_get '.remote.path'
 }
 
 remote_setup() {

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 
 TUI_WIDTH=100
-TUI_MODE="snapshots"
+TUI_MODE="repositories"
 TUI_FOCUS="actions"
 TUI_ACTION_INDEX=0
+TUI_REPOSITORY_INDEX=0
 TUI_SNAPSHOT_INDEX=0
 TUI_PATH_KIND="include"
 TUI_PATH_INCLUDE_INDEX=0
@@ -13,6 +14,7 @@ TUI_LOG=""
 TUI_SNAPSHOTS_JSON=""
 TUI_SNAPSHOTS_TSV=""
 TUI_SNAPSHOTS_LOADED=0
+TUI_REPOSITORIES_TSV=""
 TUI_REMOTE_READY="unknown"
 TUI_REPOSITORY_READY="unknown"
 TUI_KEY=""
@@ -194,10 +196,34 @@ tui_has_selected_snapshot() {
   [[ -n "$TUI_SNAPSHOTS_TSV" ]]
 }
 
+tui_load_repositories() {
+  if ! tui_config_exists; then
+    TUI_REPOSITORIES_TSV=""
+    return 0
+  fi
+  TUI_REPOSITORIES_TSV="$(config_jobs_list)"
+}
+
+tui_selected_repository() {
+  tui_load_repositories
+  [[ -n "$TUI_REPOSITORIES_TSV" ]] || return 1
+  sed -n "$((TUI_REPOSITORY_INDEX + 1))p" <<<"$TUI_REPOSITORIES_TSV" | awk -F'\t' '{ print $1 }'
+}
+
+tui_select_repository() {
+  local job_id="$1"
+  export CUSTOS_JOB="$job_id"
+  TUI_REMOTE_READY="unknown"
+  TUI_REPOSITORY_READY="unknown"
+  TUI_SNAPSHOTS_JSON=""
+  TUI_SNAPSHOTS_TSV=""
+  TUI_SNAPSHOTS_LOADED=0
+}
+
 tui_path_values() {
   local kind="$1"
   tui_config_exists || return 0
-  jq -r --arg kind "$kind" '.paths[$kind][]?' "$CUSTOS_CONFIG"
+  config_job_get ".paths.$kind[]?" || true
 }
 
 tui_path_count() {
@@ -206,7 +232,7 @@ tui_path_count() {
     printf '0'
     return 0
   }
-  jq -r --arg kind "$kind" '.paths[$kind] | length' "$CUSTOS_CONFIG"
+  config_job_get ".paths.$kind | length"
 }
 
 tui_path_index() {
@@ -315,16 +341,19 @@ SUMMARY
     return 0
   fi
 
-  local profile remote_type remote_name remote_path include_count exclude_count
+  local profile job_id job_name remote_type remote_name remote_path include_count exclude_count
   profile="$(jq -r '.profile // "default"' "$CUSTOS_CONFIG")"
-  remote_type="$(jq -r '.remote.type // "unknown"' "$CUSTOS_CONFIG")"
-  remote_name="$(jq -r '.remote.name // "gdrive"' "$CUSTOS_CONFIG")"
-  remote_path="$(jq -r '.remote.path // "backups/home"' "$CUSTOS_CONFIG")"
-  include_count="$(jq -r '.paths.include | length' "$CUSTOS_CONFIG")"
-  exclude_count="$(jq -r '.paths.exclude | length' "$CUSTOS_CONFIG")"
+  job_id="$(config_current_job_id)"
+  job_name="$(config_job_get_optional '.name')"
+  remote_type="$(config_job_get_optional '.remote.type')"
+  remote_name="$(config_job_get_optional '.remote.name')"
+  remote_path="$(config_job_get_optional '.remote.path')"
+  include_count="$(config_job_get '.paths.include | length')"
+  exclude_count="$(config_job_get '.paths.exclude | length')"
 
   cat <<SUMMARY
 Profile      $profile
+Job          $job_name ($job_id)
 Remote       $remote_type / ${remote_name}:${remote_path}
 Includes     $include_count paths
 Excludes     $exclude_count patterns
@@ -333,6 +362,17 @@ SUMMARY
 }
 
 tui_actions() {
+  if [[ "$TUI_MODE" == "repositories" ]] && tui_config_exists; then
+    cat <<'ACTIONS'
+Connect selected repository
+Add repository
+Restore config from remote
+Doctor
+Quit
+ACTIONS
+    return 0
+  fi
+
   if [[ "$TUI_MODE" == "paths" ]]; then
     cat <<'ACTIONS'
 Add include
@@ -391,6 +431,7 @@ ACTIONS
     printf '%s\n' "Browse selected snapshot"
   fi
   cat <<'ACTIONS'
+Back to repositories
 Refresh snapshots
 Manage paths
 Check repository
@@ -474,6 +515,55 @@ tui_render_snapshots() {
     count=$((count + 1))
     ((count >= 8)) && break
   done < <(tui_snapshot_lines)
+  ((count < 8)) && tui_box_blank_lines $((8 - count)) "$focused"
+  tui_box_bottom "$focused"
+}
+
+tui_repository_lines() {
+  if ! tui_config_exists; then
+    cat <<'REPOS'
+No config yet
+Connect Google Drive, then restore or create config
+REPOS
+    return 0
+  fi
+
+  tui_load_repositories
+  if [[ -z "$TUI_REPOSITORIES_TSV" ]]; then
+    cat <<'REPOS'
+No repositories configured
+Add a repository to start backing up
+REPOS
+    return 0
+  fi
+
+  printf '%-2s %-16s %-22s %-12s %s\n' "" "ID" "Name" "Remote" "Path"
+  local i=0 id name remote path default marker display
+  while IFS=$'\t' read -r id name remote path default; do
+    marker=" "
+    [[ "$i" == "$TUI_REPOSITORY_INDEX" ]] && marker=">"
+    [[ "$default" == "default" ]] && name="$name *"
+    display="$(printf '%-2s %-16s %-22s %-12s %s' "$marker" "$id" "$(tui_trim "$name" 22)" "$remote" "$path")"
+    printf '%s\n' "$display"
+    i=$((i + 1))
+  done <<<"$TUI_REPOSITORIES_TSV"
+}
+
+tui_render_repositories() {
+  local focused=0 count=0
+  [[ "$TUI_MODAL_ACTIVE" != "1" && "$TUI_FOCUS" == "repositories" ]] && focused=1
+  tui_box_top "Repositories" "$focused"
+  while IFS= read -r line; do
+    if [[ "$focused" == "1" && "$count" == "0" && -n "$TUI_REPOSITORIES_TSV" ]]; then
+      tui_box_colored_line "$line" "$focused" "$TUI_COLOR_HEADER"
+    elif [[ "$focused" == "1" && "$line" == "> "* ]]; then
+      tui_box_colored_line "$line" "$focused" "$TUI_COLOR_SELECTED"
+    else
+      tui_box_line "$line" "$focused"
+    fi
+    count=$((count + 1))
+    ((count >= 8)) && break
+  done < <(tui_repository_lines)
   ((count < 8)) && tui_box_blank_lines $((8 - count)) "$focused"
   tui_box_bottom "$focused"
 }
@@ -619,6 +709,7 @@ tui_render_paths() {
 tui_render_middle_pane() {
   case "$TUI_MODE" in
     paths) tui_render_paths ;;
+    repositories) tui_render_repositories ;;
     *) tui_render_snapshots ;;
   esac
 }
@@ -728,8 +819,8 @@ tui_probe_remote_state() {
 
   tui_config_exists || return 0
 
-  remote_type="$(jq -r '.remote.type // "google-drive"' "$CUSTOS_CONFIG")"
-  remote_name="$(jq -r '.remote.name // "gdrive"' "$CUSTOS_CONFIG" | sed 's/:$//')"
+  remote_type="$(config_job_get_optional '.remote.type')"
+  remote_name="$(config_job_get_optional '.remote.name' | sed 's/:$//')"
   [[ -n "$remote_name" ]] || remote_name="gdrive"
 
   if [[ "$remote_type" != "google-drive" ]]; then
@@ -758,13 +849,13 @@ tui_repository_config_exists() {
 
   tui_config_exists || return 1
 
-  remote_type="$(jq -r '.remote.type // "google-drive"' "$CUSTOS_CONFIG")"
+  remote_type="$(config_job_get_optional '.remote.type')"
   if [[ "$remote_type" != "google-drive" ]]; then
     return 0
   fi
 
-  remote_name="$(jq -r '.remote.name // "gdrive"' "$CUSTOS_CONFIG" | sed 's/:$//')"
-  remote_path="$(jq -r '.remote.path // "backups/home"' "$CUSTOS_CONFIG")"
+  remote_name="$(config_job_get_optional '.remote.name' | sed 's/:$//')"
+  remote_path="$(config_job_get_optional '.remote.path')"
   [[ -n "$remote_name" ]] || remote_name="gdrive"
 
   rclone lsf "${remote_name}:${remote_path}" --files-only 2>/dev/null | grep -Fxq "config"
@@ -1111,11 +1202,69 @@ tui_action_manage_paths() {
   TUI_STATUS="Path management open"
 }
 
+tui_action_back_to_repositories() {
+  TUI_MODE="repositories"
+  TUI_FOCUS="repositories"
+  TUI_ACTION_INDEX=0
+  TUI_STATUS="Repository list restored"
+}
+
 tui_action_back_to_snapshots() {
   TUI_MODE="snapshots"
   TUI_FOCUS="actions"
   TUI_ACTION_INDEX=0
   TUI_STATUS="Snapshot view restored"
+}
+
+tui_action_connect_selected_repository() {
+  local job_id
+  job_id="$(tui_selected_repository)" || {
+    TUI_STATUS="No repository selected"
+    return 1
+  }
+
+  tui_select_repository "$job_id"
+  TUI_STATUS="Checking repository $job_id..."
+  tui_probe_remote_state
+  tui_probe_repository_state
+  if [[ "$TUI_REMOTE_READY" == "0" || "$TUI_REPOSITORY_READY" == "0" ]]; then
+    TUI_STATUS="Repository $job_id needs setup"
+    TUI_MODE="snapshots"
+    TUI_FOCUS="actions"
+    TUI_ACTION_INDEX=0
+    return 1
+  fi
+
+  if tui_bootstrap_snapshots; then
+    TUI_MODE="snapshots"
+    TUI_FOCUS="actions"
+    TUI_ACTION_INDEX=0
+  fi
+}
+
+tui_action_add_repository() {
+  local id source remote
+  tui_render_modal "Add Repository" "Enter a short repository id."
+  id="$(tui_read_line "ID> ")" || return 1
+  [[ -n "$id" ]] || {
+    TUI_STATUS="Repository add cancelled"
+    return 0
+  }
+  tui_render_modal "Add Repository" "Enter the source path to back up."
+  source="$(tui_read_line "Source> ")" || return 1
+  tui_render_modal "Add Repository" "Enter the remote path, for example gdrive:backups/home."
+  remote="$(tui_read_line "Remote> ")" || return 1
+  if [[ -z "$source" || -z "$remote" ]]; then
+    TUI_STATUS="Repository add cancelled"
+    return 0
+  fi
+
+  if tui_capture tui_cli jobs add "$id" --source "$source" --remote "$remote"; then
+    tui_load_repositories
+    TUI_STATUS="Repository added"
+  else
+    TUI_STATUS="Repository add failed"
+  fi
 }
 
 tui_action_add_path() {
@@ -1204,6 +1353,8 @@ tui_activate_action() {
         TUI_STATUS="Remote setup failed"
       fi
       ;;
+    "Connect selected repository") tui_action_connect_selected_repository ;;
+    "Add repository") tui_action_add_repository ;;
     "Connect repository") tui_bootstrap_snapshots ;;
     "Restore config from remote")
       if tui_confirm "Restore config from remote? This can overwrite local config."; then
@@ -1233,6 +1384,7 @@ tui_activate_action() {
     "Add exclude") tui_action_add_path exclude ;;
     "Remove selected path") tui_action_remove_selected_path ;;
     "Back to snapshots") tui_action_back_to_snapshots ;;
+    "Back to repositories") tui_action_back_to_repositories ;;
     "Check repository")
       tui_capture_repo_with_loading "Checking repository" check && TUI_STATUS="Repository check passed" || TUI_STATUS="Repository check failed"
       ;;
@@ -1265,6 +1417,15 @@ tui_move_selection() {
       TUI_SNAPSHOT_INDEX=$((TUI_SNAPSHOT_INDEX + direction))
       ((TUI_SNAPSHOT_INDEX < 0)) && TUI_SNAPSHOT_INDEX=0
       ((TUI_SNAPSHOT_INDEX >= count)) && TUI_SNAPSHOT_INDEX=$((count - 1))
+      ;;
+    repositories)
+      tui_load_repositories
+      local count=0
+      [[ -n "$TUI_REPOSITORIES_TSV" ]] && count="$(wc -l <<<"$TUI_REPOSITORIES_TSV")"
+      ((count == 0)) && return 0
+      TUI_REPOSITORY_INDEX=$((TUI_REPOSITORY_INDEX + direction))
+      ((TUI_REPOSITORY_INDEX < 0)) && TUI_REPOSITORY_INDEX=0
+      ((TUI_REPOSITORY_INDEX >= count)) && TUI_REPOSITORY_INDEX=$((count - 1))
       ;;
     paths)
       local count index
@@ -1314,6 +1475,15 @@ tui_next_focus() {
     return 0
   fi
 
+  if [[ "$TUI_MODE" == "repositories" ]]; then
+    case "$TUI_FOCUS" in
+      repositories) TUI_FOCUS="actions" ;;
+      actions) TUI_FOCUS="repositories" ;;
+      *) TUI_FOCUS="repositories" ;;
+    esac
+    return 0
+  fi
+
   case "$TUI_FOCUS" in
     snapshots) TUI_FOCUS="actions" ;;
     actions) TUI_FOCUS="snapshots" ;;
@@ -1344,6 +1514,12 @@ tui_main() {
     tui_render
   fi
   tui_probe_repository_state
+  if tui_config_exists; then
+    TUI_MODE="repositories"
+    TUI_FOCUS="repositories"
+  else
+    TUI_FOCUS="actions"
+  fi
 
   while true; do
     tui_load_actions
@@ -1353,21 +1529,31 @@ tui_main() {
 
     case "$key" in
       q|Q) break ;;
-      r|R) tui_config_exists && tui_refresh_snapshots ;;
+      r|R)
+        if [[ "$TUI_MODE" == "repositories" ]]; then
+          tui_action_connect_selected_repository || true
+        else
+          tui_config_exists && tui_refresh_snapshots
+        fi
+        ;;
       $'\t') tui_next_focus ;;
       $'\033[A'|k|K) tui_move_selection -1 ;;
       $'\033[B'|j|J) tui_move_selection 1 ;;
       $'\033[D'|h|H) tui_move_path_column ;;
       $'\033[C'|l|L) tui_move_path_column ;;
       "")
-        if [[ "$TUI_MODE" == "paths" && "$TUI_FOCUS" == "paths" ]]; then
+        if [[ "$TUI_MODE" == "repositories" && "$TUI_FOCUS" == "repositories" ]]; then
+          tui_action_connect_selected_repository || true
+        elif [[ "$TUI_MODE" == "paths" && "$TUI_FOCUS" == "paths" ]]; then
           tui_action_remove_selected_path || true
         else
           tui_activate_action || [[ "$?" != "2" ]] || break
         fi
         ;;
       $'\n')
-        if [[ "$TUI_MODE" == "paths" && "$TUI_FOCUS" == "paths" ]]; then
+        if [[ "$TUI_MODE" == "repositories" && "$TUI_FOCUS" == "repositories" ]]; then
+          tui_action_connect_selected_repository || true
+        elif [[ "$TUI_MODE" == "paths" && "$TUI_FOCUS" == "paths" ]]; then
           tui_action_remove_selected_path || true
         else
           tui_activate_action || [[ "$?" != "2" ]] || break

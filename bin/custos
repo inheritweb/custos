@@ -41,6 +41,10 @@ Commands:
   status                       Show repository and backup status
   tui                          Open the interactive terminal UI
   uninstall                    Remove the installed command and app files
+  jobs list                    Show configured backup jobs
+  jobs add <id> --source <path> --remote <remote:path>
+  jobs remove <id>             Remove a backup job
+  jobs default <id>            Set default backup job
   remote setup                 Configure the configured remote backend
   remote check                 Check the configured remote backend
   password setup               Create/check an optional stored backup password
@@ -65,8 +69,33 @@ Options accepted by restore:
 
 Environment:
   CUSTOS_CONFIG        Override config path
+  CUSTOS_JOB           Select a configured backup job
   CUSTOS_DRY_RUN       Set to 1 to print backend commands
 USAGE
+}
+
+CMD_ARGS=()
+
+parse_job_option() {
+  CMD_ARGS=()
+  while (($#)); do
+    case "$1" in
+      --job)
+        shift
+        (($#)) || die "--job requires a value"
+        export CUSTOS_JOB="$1"
+        shift
+        ;;
+      --job=*)
+        export CUSTOS_JOB="${1#--job=}"
+        shift
+        ;;
+      *)
+        CMD_ARGS+=("$1")
+        shift
+        ;;
+    esac
+  done
 }
 
 require_command() {
@@ -256,12 +285,14 @@ config_restore_from_repository() {
   config_dir="$(dirname -- "$CUSTOS_CONFIG")"
   mkdir -p "$config_dir"
   cp "$restored_config" "$CUSTOS_CONFIG"
+  config_migrate_if_needed
   rm -rf "$target_dir"
   log_success "Restored config to $CUSTOS_CONFIG"
 }
 
 cmd_init() {
   require_runtime_dependencies
+  parse_job_option "$@"
   config_validate
   remote_load
   remote_check
@@ -270,6 +301,7 @@ cmd_init() {
 
 cmd_setup() {
   require_runtime_dependencies
+  parse_job_option "$@"
   config_validate
   remote_load
   remote_setup
@@ -377,64 +409,79 @@ USAGE
 
 cmd_backup() {
   require_runtime_dependencies
+  parse_job_option "$@"
   config_validate
   remote_load
   remote_check
-  restic_backup "$@"
+  restic_backup "${CMD_ARGS[@]}"
 }
 
 cmd_snapshots() {
   require_runtime_dependencies
+  parse_job_option "$@"
   config_validate
   remote_load
-  restic_snapshots "$@"
+  restic_snapshots "${CMD_ARGS[@]}"
 }
 
 cmd_ls() {
   require_runtime_dependencies
+  parse_job_option "$@"
   config_validate
   remote_load
-  restic_ls "$@"
+  restic_ls "${CMD_ARGS[@]}"
 }
 
 cmd_restore() {
   require_runtime_dependencies
+  parse_job_option "$@"
   config_validate
   remote_load
-  restore_run "$@"
+  restore_run "${CMD_ARGS[@]}"
 }
 
 cmd_check() {
   require_runtime_dependencies
+  parse_job_option "$@"
   config_validate
   remote_load
-  restic_check "$@"
+  restic_check "${CMD_ARGS[@]}"
 }
 
 cmd_forget() {
   require_runtime_dependencies
+  parse_job_option "$@"
   config_validate
   remote_load
-  restic_forget "$@"
+  restic_forget "${CMD_ARGS[@]}"
 }
 
 cmd_prune() {
   require_runtime_dependencies
+  parse_job_option "$@"
   config_validate
   remote_load
-  restic_prune "$@"
+  restic_prune "${CMD_ARGS[@]}"
 }
 
 cmd_unlock() {
   require_runtime_dependencies
+  parse_job_option "$@"
   config_validate
   remote_load
-  restic_unlock "$@"
+  restic_unlock "${CMD_ARGS[@]}"
+}
+
+cmd_status() {
+  require_runtime_dependencies
+  parse_job_option "$@"
+  status_show "${CMD_ARGS[@]}"
 }
 
 cmd_remote() {
-  local subcommand="${1:-}"
-  shift || true
+  parse_job_option "$@"
+  local subcommand="${CMD_ARGS[0]:-}"
+  set -- "${CMD_ARGS[@]:1}"
 
   require_runtime_dependencies
   config_validate
@@ -457,6 +504,77 @@ USAGE
       ;;
     *)
       die "Unknown remote command: $subcommand"
+      ;;
+  esac
+}
+
+cmd_jobs() {
+  local subcommand="${1:-}"
+  shift || true
+
+  require_command jq || die "Missing dependency: jq"
+  config_validate
+
+  case "$subcommand" in
+    list)
+      printf 'ID\tName\tRemote\tPath\tDefault\n'
+      config_jobs_list
+      ;;
+    add)
+      local id="${1:-}" name="" source="" remote=""
+      [[ -n "$id" ]] || die "Usage: custos jobs add <id> --source <path> --remote <remote:path> [--name <name>]"
+      shift || true
+      while (($#)); do
+        case "$1" in
+          --name)
+            shift
+            (($#)) || die "--name requires a value"
+            name="$1"
+            shift
+            ;;
+          --source)
+            shift
+            (($#)) || die "--source requires a value"
+            source="$1"
+            shift
+            ;;
+          --remote)
+            shift
+            (($#)) || die "--remote requires a value"
+            remote="$1"
+            shift
+            ;;
+          *)
+            die "Unknown jobs add option: $1"
+            ;;
+        esac
+      done
+      config_job_add "$id" "$name" "$source" "$remote"
+      log_success "Added job: $id"
+      ;;
+    remove)
+      local id="${1:-}"
+      [[ -n "$id" ]] || die "Usage: custos jobs remove <id>"
+      config_job_remove "$id"
+      log_success "Removed job: $id"
+      ;;
+    default|select)
+      local id="${1:-}"
+      [[ -n "$id" ]] || die "Usage: custos jobs default <id>"
+      config_job_set_default "$id"
+      log_success "Default job: $id"
+      ;;
+    ""|-h|--help|help)
+      cat <<'USAGE'
+Usage:
+  custos jobs list
+  custos jobs add <id> --source <path> --remote <remote:path> [--name <name>]
+  custos jobs remove <id>
+  custos jobs default <id>
+USAGE
+      ;;
+    *)
+      die "Unknown jobs command: $subcommand"
       ;;
   esac
 }
@@ -489,8 +607,9 @@ USAGE
 }
 
 cmd_paths() {
-  local subcommand="${1:-}"
-  shift || true
+  parse_job_option "$@"
+  local subcommand="${CMD_ARGS[0]:-}"
+  set -- "${CMD_ARGS[@]:1}"
 
   require_command jq || die "Missing dependency: jq"
   config_validate
@@ -554,9 +673,10 @@ main() {
     forget) cmd_forget "$@" ;;
     prune) cmd_prune "$@" ;;
     unlock) cmd_unlock "$@" ;;
-    status) status_show "$@" ;;
+    status) cmd_status "$@" ;;
     tui) tui_main "$@" ;;
     uninstall) cmd_uninstall "$@" ;;
+    jobs) cmd_jobs "$@" ;;
     remote) cmd_remote "$@" ;;
     password) cmd_password "$@" ;;
     paths) cmd_paths "$@" ;;

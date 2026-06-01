@@ -93,13 +93,15 @@ just `custos`.
 
 ![Custos TUI screenshot](assets/screenshot.png)
 
-The TUI is a shell frontend over the same commands documented below. It uses a
-static dashboard layout: config, snapshots, and actions stay visible while focus
-moves between the snapshots and actions panes with Tab.
+The TUI is a shell frontend over the same commands documented below. It opens on
+a repositories list. Select a repository, enter its password if needed, then the
+snapshots and actions for that repository become visible. Tab moves between the
+active panes.
 
 On first run, the actions pane lets you connect Google Drive, restore an existing
-config, or create a new config. Once configured, snapshots stay visible alongside
-backup, restore, path, repository, and maintenance actions.
+config, or create a new config. Once configured, repositories stay visible as the
+top-level choice, and each selected repository has its own backup, restore, path,
+repository, and maintenance actions.
 
 If no stored password command is available, the TUI asks for the repository
 password once at session start and reuses it for repository actions. Passwords
@@ -129,10 +131,12 @@ Check the local environment:
 custos doctor
 ```
 
-Create or inspect the config:
+Create or inspect the config. The default config creates one job named `home`
+that backs up `~` to `gdrive:backups/home`:
 
 ```bash
 custos config show
+custos jobs list
 custos paths list
 ```
 
@@ -211,10 +215,16 @@ Use `--original` only when you want Restic to write back to the original paths.
 
 ### Change What Gets Backed Up
 
-List the active include and exclude rules:
+List the active include and exclude rules for the default job:
 
 ```bash
 custos paths list
+```
+
+For a specific job, pass `--job`:
+
+```bash
+custos paths --job home list
 ```
 
 Add or remove protected paths:
@@ -235,6 +245,32 @@ Preview before running the next backup:
 
 ```bash
 custos backup --dry-run
+```
+
+### Multiple Repositories
+
+Custos stores backup jobs in `config.json`. Each job has one source set and one
+remote repository. The default job is `home`, which links `~` to
+`gdrive:backups/home`.
+
+Add another job:
+
+```bash
+custos jobs add data --source /dev/mymountpoint --remote gdrive:backups/data
+```
+
+Run commands against a specific job:
+
+```bash
+custos backup --job data
+custos snapshots --job data
+custos restore --job data latest --target ~/Restored/custos/data
+```
+
+Set the default job used by commands that do not pass `--job`:
+
+```bash
+custos jobs default data
 ```
 
 ### Interrupted Or Failed Backup
@@ -269,6 +305,9 @@ The first config command creates:
 ```txt
 ~/.config/custos/config.json
 ```
+
+Current configs use version 2 and store one or more backup jobs. Older version 1
+configs are migrated automatically the next time Custos reads them.
 
 Set up Google Drive storage and initialize the restic repository:
 
@@ -316,25 +355,29 @@ custos init
 custos setup
 custos
 custos tui  # explicit TUI alias
-custos backup [--dry-run]
-custos snapshots [args...]
-custos ls <snapshot> [path]
-custos restore <snapshot> [path] [--target <path>|--original] [--dry-run] [--yes]
-custos check
+custos jobs list
+custos jobs add <id> --source <path> --remote <remote:path> [--name <name>]
+custos jobs remove <id>
+custos jobs default <id>
+custos backup [--job <id>] [--dry-run]
+custos snapshots [--job <id>] [args...]
+custos ls [--job <id>] <snapshot> [path]
+custos restore [--job <id>] <snapshot> [path] [--target <path>|--original] [--dry-run] [--yes]
+custos check [--job <id>]
 custos doctor
 custos remote setup
 custos remote check
 custos password setup
 custos password status
-custos paths list
-custos paths include add <path>
-custos paths include remove <path>
-custos paths exclude add <pattern>
-custos paths exclude remove <pattern>
-custos forget [--dry-run]
-custos prune
-custos unlock
-custos status
+custos paths [--job <id>] list
+custos paths [--job <id>] include add <path>
+custos paths [--job <id>] include remove <path>
+custos paths [--job <id>] exclude add <pattern>
+custos paths [--job <id>] exclude remove <pattern>
+custos forget [--job <id>] [--dry-run]
+custos prune [--job <id>]
+custos unlock [--job <id>]
+custos status [--job <id>]
 custos config show
 custos config validate
 custos config edit

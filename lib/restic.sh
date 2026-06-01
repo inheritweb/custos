@@ -2,7 +2,7 @@
 
 remote_load() {
   local remote_type remote_file
-  remote_type="$(config_get '.remote.type')"
+  remote_type="$(config_job_get '.remote.type')"
   remote_file="$CUSTOS_LIB_DIR/remotes/${remote_type}.sh"
 
   [[ -f "$remote_file" ]] || die "Unsupported remote type: $remote_type"
@@ -261,9 +261,9 @@ restic_forget() {
   done
 
   local daily weekly monthly
-  daily="$(config_get '.retention.daily')"
-  weekly="$(config_get '.retention.weekly')"
-  monthly="$(config_get '.retention.monthly')"
+  daily="$(config_retention_value daily)"
+  weekly="$(config_retention_value weekly)"
+  monthly="$(config_retention_value monthly)"
 
   local -a args=(forget --keep-daily "$daily" --keep-weekly "$weekly" --keep-monthly "$monthly")
   if ((dry_run)); then

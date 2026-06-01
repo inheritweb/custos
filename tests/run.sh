@@ -162,7 +162,8 @@ test_default_config_has_no_password_command() {
 
   CUSTOS_CONFIG="$config" "$CLI" config show >"$output"
 
-  assert_contains "$output" '"version": 1'
+  assert_contains "$output" '"version": 2'
+  assert_contains "$output" '"jobs":'
   assert_not_contains "$output" 'passwordCommand'
 }
 
@@ -172,8 +173,8 @@ test_default_paths_are_project_neutral() {
 
   CUSTOS_CONFIG="$config" "$CLI" config show >"$output"
 
-  assert_contains "$output" '"~/Documents"'
-  assert_contains "$output" '"~/Pictures"'
+  assert_contains "$output" '"~"'
+  assert_contains "$output" '"backups/home"'
   assert_contains "$output" '"**/*.iso"'
   assert_not_contains "$output" '"~/development"'
   assert_not_contains "$output" '"**/build"'
@@ -205,7 +206,7 @@ test_paths_commands_add_remove_and_dedupe() {
   assert_contains "$output" '  - **/coverage'
 
   local include_count
-  include_count="$(jq '[.paths.include[] | select(. == "~/Projects")] | length' "$config")"
+  include_count="$(jq '[.jobs[] | select(.id == "home") | .paths.include[] | select(. == "~/Projects")] | length' "$config")"
   if [[ "$include_count" != "1" ]]; then
     printf 'Expected ~/Projects to appear once, got %s\n' "$include_count" >&2
     return 1
@@ -241,6 +242,70 @@ test_paths_commands_compact_home_to_tilde() {
   assert_not_contains "$output" '  - ~/Projects/cache'
 }
 
+test_jobs_commands_add_default_and_job_scoped_paths() {
+  local config="$TMP_DIR/jobs.json"
+  local output="$TMP_DIR/jobs.out"
+
+  make_config "$config"
+
+  CUSTOS_CONFIG="$config" "$CLI" jobs add data --source /mnt/data --remote gdrive:backups/data >/dev/null
+  CUSTOS_CONFIG="$config" "$CLI" jobs default data >/dev/null
+  CUSTOS_CONFIG="$config" "$CLI" jobs list >"$output"
+
+  assert_contains "$output" $'data\tdata\tgdrive\tbackups/data\tdefault'
+
+  CUSTOS_CONFIG="$config" "$CLI" paths --job data exclude add '**/*.tmp' >/dev/null
+  CUSTOS_CONFIG="$config" "$CLI" paths --job data list >"$output"
+  assert_contains "$output" 'Job: data'
+  assert_contains "$output" '  - /mnt/data'
+  assert_contains "$output" '  - **/*.tmp'
+
+  CUSTOS_CONFIG="$config" "$CLI" paths --job home list >"$output"
+  assert_contains "$output" 'Job: home'
+  assert_not_contains "$output" '**/*.tmp'
+}
+
+test_v1_config_migrates_to_jobs() {
+  local config="$TMP_DIR/v1-config.json"
+  local output="$TMP_DIR/v1-config.out"
+
+  cat >"$config" <<'JSON'
+{
+  "version": 1,
+  "profile": "legacy",
+  "remote": {
+    "type": "google-drive",
+    "name": "gdrive",
+    "path": "backups/home"
+  },
+  "repository": {
+    "name": "desktop",
+    "hostname": "legacy-host"
+  },
+  "paths": {
+    "include": ["~/Documents"],
+    "exclude": ["**/node_modules"]
+  },
+  "retention": {
+    "daily": 7,
+    "weekly": 4,
+    "monthly": 6
+  }
+}
+JSON
+
+  CUSTOS_CONFIG="$config" "$CLI" config validate >"$output" 2>&1
+  CUSTOS_CONFIG="$config" "$CLI" config show >"$output"
+
+  assert_contains "$output" '"version": 2'
+  assert_contains "$output" '"defaultJob": "desktop"'
+  assert_contains "$output" '"~/Documents"'
+  if jq -e 'has("remote") or has("paths") or has("repository")' "$config" >/dev/null; then
+    printf 'Expected legacy top-level remote/paths/repository to be migrated into jobs\n' >&2
+    return 1
+  fi
+}
+
 test_backup_dry_run_announces_interactive_password() {
   local config="$TMP_DIR/backup-dry-run.json"
   local output="$TMP_DIR/backup-dry-run.out"
@@ -250,7 +315,7 @@ test_backup_dry_run_announces_interactive_password() {
   make_config "$config"
   mkdir -p "$existing_path"
   jq --arg existing "$existing_path" --arg missing "$missing_path" '
-    .paths.include = [$existing, $missing]
+    .jobs = (.jobs | map(if .id == "home" then .paths.include = [$existing, $missing] else . end))
   ' "$config" >"$TMP_DIR/backup-dry-run.next"
   mv "$TMP_DIR/backup-dry-run.next" "$config"
 
@@ -271,7 +336,7 @@ test_backup_uploads_config_bootstrap() {
 
   make_config "$config"
   mkdir -p "$existing_path"
-  jq --arg existing "$existing_path" '.paths.include = [$existing]' "$config" >"$TMP_DIR/backup-config-bootstrap.next"
+  jq --arg existing "$existing_path" '.jobs = (.jobs | map(if .id == "home" then .paths.include = [$existing] else . end))' "$config" >"$TMP_DIR/backup-config-bootstrap.next"
   mv "$TMP_DIR/backup-config-bootstrap.next" "$config"
   : >"$RCLONE_LOG"
 
@@ -437,7 +502,7 @@ test_tui_first_run_exit_starts_cleanly() {
   fi
 
   assert_contains "$output" "No local config found"
-  assert_contains "$output" "Snapshots"
+  assert_contains "$output" "Repositories"
   assert_contains "$output" "Actions"
   assert_contains "$output" "Connect Google Drive"
   assert_contains "$output" $'\033[3m'
@@ -482,10 +547,10 @@ test_tui_configured_exit_starts_cleanly() {
   fi
 
   assert_contains "$output" "Config"
-  assert_contains "$output" "Snapshots"
+  assert_contains "$output" "Repositories"
   assert_contains "$output" "Actions"
   assert_contains "$output" "Remote"
-  assert_contains "$output" "Connect repository"
+  assert_contains "$output" "Connect selected repository"
   assert_not_contains "$output" "Repository Password"
   assert_not_contains "$output" "Snapshots loaded"
   assert_not_contains "$output" "Browse selected snapshot"
@@ -533,7 +598,7 @@ test_tui_setup_repository_confirms_and_reuses_password() {
   make_config "$config"
   snapshots='[{"short_id":"abc12345","time":"2026-05-30T21:32:39+01:00","hostname":"vm","paths":["/home/test"]}]'
 
-  if ! RCLONE_REPOSITORY_CONFIG_MISSING=1 RESTIC_SNAPSHOTS_JSON="$snapshots" CUSTOS_TUI_PASSWORD=$'new-password\nnew-password' CUSTOS_TUI_KEYS=$'\nq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! RCLONE_REPOSITORY_CONFIG_MISSING=1 RESTIC_SNAPSHOTS_JSON="$snapshots" CUSTOS_TUI_PASSWORD=$'new-password\nnew-password' CUSTOS_TUI_KEYS=$'\n\nq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,260p' "$output" >&2
     return 1
   fi
@@ -556,7 +621,7 @@ test_tui_down_navigation_does_not_exit() {
     return 1
   fi
 
-  assert_contains "$output" "Connect repository"
+  assert_contains "$output" "Connect selected repository"
   assert_not_contains "$output" "Repository operation failed"
 }
 
@@ -720,7 +785,7 @@ test_tui_check_repository_shows_running_state() {
 
   make_config "$config"
 
-  if ! RESTIC_CHECK_SLEEP=0.1 CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS=$'\njjj\nq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! RESTIC_CHECK_SLEEP=0.1 CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS=$'\njjjj\nq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,420p' "$output" >&2
     return 1
   fi
@@ -736,7 +801,7 @@ test_tui_prune_repository_shows_running_state() {
 
   make_config "$config"
 
-  if ! RESTIC_PRUNE_SLEEP=0.1 CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS=$'\njjjjj\nyq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! RESTIC_PRUNE_SLEEP=0.1 CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS=$'\njjjjjj\nyq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,460p' "$output" >&2
     return 1
   fi
@@ -756,7 +821,7 @@ test_tui_manage_paths_shows_existing_paths() {
   CUSTOS_CONFIG="$config" "$CLI" paths exclude add '**/coverage' >/dev/null
   CUSTOS_CONFIG="$config" "$CLI" paths exclude add 'zz-visible' >/dev/null
 
-  if ! CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS=$'\njj\nq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS=$'\njjj\nq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,420p' "$output" >&2
     return 1
   fi
@@ -776,14 +841,14 @@ test_tui_manage_paths_removes_selected_include() {
 
   make_config "$config"
 
-  if ! CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS=$'\njj\n\nyq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS=$'\njjj\n\nyq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,420p' "$output" >&2
     return 1
   fi
 
   assert_contains "$output" "Remove include path?"
   assert_contains "$output" "Path removed"
-  if jq -e '.paths.include[] | select(. == "~/Documents")' "$config" >/dev/null; then
+  if jq -e '.jobs[] | select(.id == "home") | .paths.include[] | select(. == "~")' "$config" >/dev/null; then
     printf 'Expected selected include path to be removed\n' >&2
     return 1
   fi
@@ -795,14 +860,14 @@ test_tui_manage_paths_removes_selected_exclude() {
 
   make_config "$config"
 
-  if ! CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS=$'\njj\n\t\nyq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_KEYS=$'\njjj\n\t\nyq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,420p' "$output" >&2
     return 1
   fi
 
   assert_contains "$output" "Remove exclude path?"
   assert_contains "$output" "Path removed"
-  if jq -e '.paths.exclude[] | select(. == "**/node_modules")' "$config" >/dev/null; then
+  if jq -e '.jobs[] | select(.id == "home") | .paths.exclude[] | select(. == "**/node_modules")' "$config" >/dev/null; then
     printf 'Expected selected exclude path to be removed\n' >&2
     return 1
   fi
@@ -814,14 +879,14 @@ test_tui_manage_paths_adds_include_from_actions() {
 
   make_config "$config"
 
-  if ! CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_INPUT='~/Vault' CUSTOS_TUI_KEYS=$'\njj\n\t\t\nq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
+  if ! CUSTOS_TUI_PASSWORD="test-password" CUSTOS_TUI_INPUT='~/Vault' CUSTOS_TUI_KEYS=$'\njjj\n\t\t\nq' CUSTOS_CONFIG="$config" "$CLI" tui >"$output" 2>&1; then
     sed -n '1,420p' "$output" >&2
     return 1
   fi
 
   assert_contains "$output" "Add Include"
   assert_contains "$output" "Include path added"
-  if ! jq -e '.paths.include[] | select(. == "~/Vault")' "$config" >/dev/null; then
+  if ! jq -e '.jobs[] | select(.id == "home") | .paths.include[] | select(. == "~/Vault")' "$config" >/dev/null; then
     printf 'Expected ~/Vault include path to be added\n' >&2
     return 1
   fi
@@ -870,7 +935,7 @@ test_installer_installs_local_checkout_wrapper() {
   assert_contains "$output" "Installed custos"
   assert_contains "$output" "Dependencies are not installed by this script"
   assert_contains "$output" "Run: custos"
-  assert_contains "$TMP_DIR/installed-config.out" '"version": 1'
+  assert_contains "$TMP_DIR/installed-config.out" '"version": 2'
 }
 
 test_uninstall_removes_installed_files_config_and_state() {
@@ -953,6 +1018,8 @@ run_test "default paths are project-neutral" test_default_paths_are_project_neut
 run_test "password status defaults to interactive" test_password_status_defaults_to_interactive
 run_test "paths commands add remove and dedupe" test_paths_commands_add_remove_and_dedupe
 run_test "paths commands compact home to tilde" test_paths_commands_compact_home_to_tilde
+run_test "jobs commands add default and job-scoped paths" test_jobs_commands_add_default_and_job_scoped_paths
+run_test "v1 config migrates to jobs" test_v1_config_migrates_to_jobs
 run_test "backup dry-run announces interactive password" test_backup_dry_run_announces_interactive_password
 run_test "backup uploads config bootstrap" test_backup_uploads_config_bootstrap
 run_test "configured password command is exported to backend" test_password_command_is_exported_to_backend
