@@ -178,7 +178,7 @@ main() {
   install_wrapper
   log "Installed custos."
   log "Dependencies are not installed by this script; run: custos doctor"
-  log "Run: custos doctor"
+  log "Run: custos"
 }
 
 main "$@"

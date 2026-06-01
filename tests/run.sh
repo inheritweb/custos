@@ -869,6 +869,7 @@ test_installer_installs_local_checkout_wrapper() {
 
   assert_contains "$output" "Installed custos"
   assert_contains "$output" "Dependencies are not installed by this script"
+  assert_contains "$output" "Run: custos"
   assert_contains "$TMP_DIR/installed-config.out" '"version": 1'
 }
 

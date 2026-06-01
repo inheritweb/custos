@@ -88,6 +88,9 @@ Launch the interactive terminal UI:
 custos
 ```
 
+`custos tui` is kept as an explicit alias, but the normal app entry point is
+just `custos`.
+
 ![Custos TUI screenshot](assets/screenshot.png)
 
 The TUI is a shell frontend over the same commands documented below. It uses a
@@ -253,7 +256,7 @@ custos prune
 
 ## Quick Start
 
-Run the CLI from the repository:
+Run command-line checks:
 
 ```bash
 custos doctor
@@ -312,7 +315,7 @@ custos restore latest ~/Documents --target ~/Restored/custos/latest
 custos init
 custos setup
 custos
-custos tui
+custos tui  # explicit TUI alias
 custos backup [--dry-run]
 custos snapshots [args...]
 custos ls <snapshot> [path]
