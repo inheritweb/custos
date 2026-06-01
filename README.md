@@ -85,7 +85,7 @@ custos uninstall --keep-local-data
 Launch the interactive terminal UI:
 
 ```bash
-custos tui
+custos
 ```
 
 ![Custos TUI screenshot](assets/screenshot.png)
@@ -311,6 +311,7 @@ custos restore latest ~/Documents --target ~/Restored/custos/latest
 ```bash
 custos init
 custos setup
+custos
 custos tui
 custos backup [--dry-run]
 custos snapshots [args...]

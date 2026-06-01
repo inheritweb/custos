@@ -22,7 +22,9 @@ source "$CUSTOS_LIB_DIR/tui.sh"
 usage() {
   cat <<'USAGE'
 Usage:
-  custos <command> [args]
+  custos [command] [args]
+
+Running custos without a command opens the interactive TUI.
 
 Commands:
   setup                        Configure remote storage and initialize repository
@@ -559,7 +561,8 @@ main() {
     password) cmd_password "$@" ;;
     paths) cmd_paths "$@" ;;
     config) cmd_config "$@" ;;
-    ""|-h|--help|help) usage ;;
+    "") tui_main "$@" ;;
+    -h|--help|help) usage ;;
     *)
       usage >&2
       die "Unknown command: $command_name"

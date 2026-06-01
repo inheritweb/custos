@@ -443,6 +443,33 @@ test_tui_first_run_exit_starts_cleanly() {
   assert_contains "$output" $'\033[3m'
 }
 
+test_bare_command_launches_tui() {
+  local config="$TMP_DIR/tui-bare-command.json"
+  local output="$TMP_DIR/tui-bare-command.out"
+
+  if ! CUSTOS_TUI_KEYS="q" CUSTOS_CONFIG="$config" "$CLI" >"$output" 2>&1; then
+    sed -n '1,220p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "No local config found"
+  assert_contains "$output" "Connect Google Drive"
+  assert_contains "$output" "Actions"
+  assert_not_contains "$output" "Usage:"
+}
+
+test_help_still_prints_usage() {
+  local output="$TMP_DIR/help.out"
+
+  if ! "$CLI" help >"$output" 2>&1; then
+    sed -n '1,120p' "$output" >&2
+    return 1
+  fi
+
+  assert_contains "$output" "Usage:"
+  assert_contains "$output" "Running custos without a command opens the interactive TUI."
+}
+
 test_tui_configured_exit_starts_cleanly() {
   local config="$TMP_DIR/tui-configured.json"
   local output="$TMP_DIR/tui-configured.out"
@@ -935,6 +962,8 @@ run_test "config restore works without existing config" test_config_restore_work
 run_test "missing dependency guidance shows common package managers" test_missing_dependencies_show_common_package_managers
 run_test "remote setup suppresses rclone token output" test_remote_setup_suppresses_rclone_token_output
 run_test "tui first-run exit starts cleanly" test_tui_first_run_exit_starts_cleanly
+run_test "bare command launches tui" test_bare_command_launches_tui
+run_test "help still prints usage" test_help_still_prints_usage
 run_test "tui configured exit starts cleanly" test_tui_configured_exit_starts_cleanly
 run_test "tui missing repository does not prompt for password" test_tui_missing_repository_does_not_prompt_for_password
 run_test "tui missing remote does not prompt for password" test_tui_missing_remote_does_not_prompt_for_password
